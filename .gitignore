@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.log
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
+
+# Runtime outputs and generated experiment artifacts.
+Outputs/
+../Outputs/
+
+# Local environments and editor state.
+.venv/
+venv/
+.env
+.idea/
+.vscode/
+
+# Large or auxiliary validation assets not required for the main UAV protocol.
+data/external/*.xlsx
