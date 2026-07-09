@@ -78,6 +78,7 @@ ERROR_METADATA_KEYS = [
     "track_missing_ratio",
     "track_jitter_std",
     "type_as_input",
+    "mission_as_input",
 ]
 
 TRACK_METRIC_NON_SUMMARY_FIELDS = {
@@ -96,6 +97,7 @@ TRACK_METRIC_NON_SUMMARY_FIELDS = {
     "track_noise_std",
     "range_m",
     "type_as_input",
+    "mission_as_input",
     "run_index",
     "seed",
     "model",

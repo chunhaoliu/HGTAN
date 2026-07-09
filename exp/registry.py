@@ -24,6 +24,7 @@ SUITE_SEQUENCE_KEYS = [
     "track_missing_ratio",
     "track_jitter_std",
     "type_as_input",
+    "mission_as_input",
 ]
 
 DATA_CONFIG_KEYS: list[str] = []
@@ -36,6 +37,7 @@ SEQUENCE_CONFIG_KEYS = [
     "track_missing_ratio",
     "track_jitter_std",
     "type_as_input",
+    "mission_as_input",
 ]
 
 
@@ -112,12 +114,12 @@ def _sequential_setting(
 
 def _comparison_settings() -> list[dict[str, Any]]:
     dataset_id = "ATUAV-Core"
-    protocol_id = "type_unknown"
+    protocol_id = "latent_state_masked"
     return [
         _sequential_setting(
             dataset_id,
             protocol_id,
-            setting_name="ATUAV-Core__type_unknown",
+            setting_name="ATUAV-Core__latent_state_masked",
             description="Default full-observation comparison setting.",
         ),
     ]
@@ -125,25 +127,25 @@ def _comparison_settings() -> list[dict[str, Any]]:
 
 def _ablation_settings() -> list[dict[str, Any]]:
     dataset_id = "ATUAV-Core"
-    protocol_id = "type_unknown"
+    protocol_id = "latent_state_masked"
     return [
         _sequential_setting(
             dataset_id,
             protocol_id,
-            setting_name="ATUAV-Core__type_unknown",
+            setting_name="ATUAV-Core__latent_state_masked",
             description="Default ablation setting on the full observed window.",
         ),
         _sequential_setting(
             dataset_id,
             protocol_id,
-            setting_name="ATUAV-Core__type_unknown__ablation_obs32",
+            setting_name="ATUAV-Core__latent_state_masked__ablation_obs32",
             description="Short-history ablation stress at 32 observed frames (6.4 s).",
             observed_len=32,
         ),
         _sequential_setting(
             dataset_id,
             protocol_id,
-            setting_name="ATUAV-Core__type_unknown__ablation_range5000",
+            setting_name="ATUAV-Core__latent_state_masked__ablation_range5000",
             description="Far-range ablation stress at 5000 m nominal sensing range.",
             range_m=5000.0,
             track_noise_std=0.015,
@@ -155,12 +157,12 @@ def _ablation_settings() -> list[dict[str, Any]]:
 
 def _observed_time_settings() -> list[dict[str, Any]]:
     dataset_id = "ATUAV-Core"
-    protocol_id = "type_unknown"
+    protocol_id = "latent_state_masked"
     return [
         _sequential_setting(
             dataset_id,
             protocol_id,
-            setting_name=f"ATUAV-Core__type_unknown__long_obs{observed_len}",
+            setting_name=f"ATUAV-Core__latent_state_masked__long_obs{observed_len}",
             description=(
                 f"Long observed-time sensitivity at {observed_len} frames "
                 f"({observed_len * 0.2:.1f} s)."
@@ -174,7 +176,7 @@ def _observed_time_settings() -> list[dict[str, Any]]:
 
 def _distance_degradation_settings() -> list[dict[str, Any]]:
     dataset_id = "ATUAV-Core"
-    protocol_id = "type_unknown"
+    protocol_id = "latent_state_masked"
     settings: list[dict[str, Any]] = []
     for range_m in [1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000]:
         range_factor = 1.0 + 2.0 * max(range_m - 1000, 0) / 4000
@@ -182,7 +184,7 @@ def _distance_degradation_settings() -> list[dict[str, Any]]:
             _sequential_setting(
                 dataset_id,
                 protocol_id,
-                setting_name=f"ATUAV-Core__type_unknown__range{range_m}",
+                setting_name=f"ATUAV-Core__latent_state_masked__range{range_m}",
                 description=(
                     f"Range-driven sensing degradation at {range_m} m "
                     f"(noise multiplier {range_factor:.2f})."
@@ -207,12 +209,13 @@ ASSESSMENT_DATASETS: dict[str, dict[str, Any]] = {
 
 ASSESSMENT_PROTOCOLS: dict[str, dict[str, Any]] = {
     "standard": _protocol_entry("Compact IID split used only for static smoke validation."),
-    "type_unknown": _protocol_entry(
-        "Default realistic sequential protocol without oracle target-type input.",
+    "latent_state_masked": _protocol_entry(
+        "Default realistic sequential protocol without oracle target-type or mission-code input.",
         seq_len=64,
         observed_len=64,
         frame_interval=0.2,
         type_as_input=False,
+        mission_as_input=False,
     ),
 }
 
@@ -227,14 +230,14 @@ ASSESSMENT_SUITES: dict[str, dict[str, Any]] = {
     "seq_smoke": _suite_entry(
         "Tiny sequential sanity suite for runner validation.",
         datasets=["ATUAV-Core"],
-        protocols=["type_unknown"],
+        protocols=["latent_state_masked"],
         default_n_samples=128,
         task_form=SEQUENTIAL_TASK_FORM,
     ),
     "comparison": _suite_entry(
         "Official manuscript comparison experiment on the default sequential protocol.",
         datasets=["ATUAV-Core"],
-        protocols=["type_unknown"],
+        protocols=["latent_state_masked"],
         default_n_samples=4000,
         task_form=SEQUENTIAL_TASK_FORM,
         settings=_comparison_settings(),
@@ -242,7 +245,7 @@ ASSESSMENT_SUITES: dict[str, dict[str, Any]] = {
     "ablation": _suite_entry(
         "Official manuscript ablation experiment on the default sequential protocol.",
         datasets=["ATUAV-Core"],
-        protocols=["type_unknown"],
+        protocols=["latent_state_masked"],
         default_n_samples=4000,
         task_form=SEQUENTIAL_TASK_FORM,
         settings=_ablation_settings(),
@@ -250,7 +253,7 @@ ASSESSMENT_SUITES: dict[str, dict[str, Any]] = {
     "observed_time": _suite_entry(
         "Comparison sensitivity axis with long observed windows from 6.4 s to 25.6 s.",
         datasets=["ATUAV-Core"],
-        protocols=["type_unknown"],
+        protocols=["latent_state_masked"],
         default_n_samples=4000,
         task_form=SEQUENTIAL_TASK_FORM,
         settings=_observed_time_settings(),
@@ -258,7 +261,7 @@ ASSESSMENT_SUITES: dict[str, dict[str, Any]] = {
     "distance_degradation": _suite_entry(
         "Comparison sensitivity axis with range-driven observation degradation from 1000 m to 5000 m.",
         datasets=["ATUAV-Core"],
-        protocols=["type_unknown"],
+        protocols=["latent_state_masked"],
         default_n_samples=4000,
         task_form=SEQUENTIAL_TASK_FORM,
         settings=_distance_degradation_settings(),

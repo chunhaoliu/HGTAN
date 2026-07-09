@@ -339,6 +339,7 @@ class HGTANConfig:
         "track_jitter_std": 0.0,
         "sensor_profile": "ATUAV-Core",
         "type_as_input": False,
+        "mission_as_input": False,
     }
 
     MODEL = {

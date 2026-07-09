@@ -115,6 +115,8 @@ def generate_uav_swarm_payload(
     scenario_profile: str | None = None,
     detection_window: str | None = None,
     benchmark_dataset: str | None = None,
+    apply_label_conditioned_perturbations: bool = True,
+    apply_static_observation_noise: bool = True,
 ) -> dict[str, Any]:
     """Generate one assessment payload for instantaneous ATUAV samples."""
     features, threat_labels, metadata = generate_uav_swarm_data(
@@ -124,6 +126,8 @@ def generate_uav_swarm_payload(
         scenario_profile=scenario_profile,
         detection_window=detection_window,
         benchmark_dataset=benchmark_dataset,
+        apply_label_conditioned_perturbations=apply_label_conditioned_perturbations,
+        apply_static_observation_noise=apply_static_observation_noise,
     )
     urgency_labels = generate_urgency_labels(features, threat_labels, metadata=metadata)
     return {
@@ -142,6 +146,8 @@ def generate_uav_swarm_data(
     scenario_profile: str | None = None,
     detection_window: str | None = None,
     benchmark_dataset: str | None = None,
+    apply_label_conditioned_perturbations: bool = True,
+    apply_static_observation_noise: bool = True,
 ):
     """
     Generate a scenario-oriented UAV swarm threat assessment dataset.
@@ -307,22 +313,24 @@ def generate_uav_swarm_data(
     threat_labels = np.digitize(threat_risk, bins=THREAT_THRESHOLDS) + 1
     threat_labels = np.clip(threat_labels, 1, 5)
 
-    features, threat_labels = add_boundary_samples(
-        features,
-        threat_labels,
-        threat_risk,
-        ratio=data_cfg.get("boundary_ratio", 0.08),
-        rng=rng,
-    )
-    features, threat_labels = add_confusing_samples(
-        features,
-        threat_labels,
-        ratio=data_cfg.get("confusing_ratio", 0.03),
-        rng=rng,
-    )
+    if apply_label_conditioned_perturbations:
+        features, threat_labels = add_boundary_samples(
+            features,
+            threat_labels,
+            threat_risk,
+            ratio=data_cfg.get("boundary_ratio", 0.08),
+            rng=rng,
+        )
+        features, threat_labels = add_confusing_samples(
+            features,
+            threat_labels,
+            ratio=data_cfg.get("confusing_ratio", 0.03),
+            rng=rng,
+        )
 
-    noise = rng.normal(0, data_cfg.get("noise_std", 0.02), features.shape)
-    features = _clip01(features + noise)
+    if apply_static_observation_noise:
+        noise = rng.normal(0, data_cfg.get("noise_std", 0.02), features.shape)
+        features = _clip01(features + noise)
 
     metadata = {
         "mission_type": mission_type,

@@ -22,6 +22,22 @@ Runtime outputs are written outside this tree to `../Outputs/atuav_assessment/`.
 If the OneDrive-backed output directory is not writable in a local sandbox, pass
 `--out-root <writable-output-root>` and keep the same `--out-subdir` names.
 
+## Sequential Information Boundary
+
+The formal sequential protocol is `latent_state_masked`. Each clean scenario
+contains latent mission, platform, formation, defense, environment, and asset
+states. The released sequence generator uses these states together with clean
+engagement geometry to define frozen reference threat and urgency assessments
+in `data/reference_policy.py`. The model receives only the sensor-degraded
+indicator sequence: target type and the latent mission code are masked by
+default. This makes the main task recovery of a fixed clean-reference policy
+from incomplete observations, not direct regression of an observed-feature
+score.
+
+The sequential generator bypasses the instantaneous generator's
+label-conditioned boundary/confusion injections and applies observation noise,
+jitter, and missingness only after the clean reference sequence is built.
+
 ## Official Experiments
 
 List available suites:

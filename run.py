@@ -28,6 +28,7 @@ SETTING_OVERRIDE_KEYS = (
     "track_missing_ratio",
     "track_jitter_std",
     "type_as_input",
+    "mission_as_input",
 )
 
 
@@ -106,6 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     sequence.add_argument("--track_missing_ratio", type=float, default=None)
     sequence.add_argument("--track_jitter_std", type=float, default=None)
     add_toggle_flag(sequence, name="type_as_input", dest="type_as_input", help_text="Append target-type hints to sequential model inputs.")
+    add_toggle_flag(sequence, name="mission_as_input", dest="mission_as_input", help_text="Append latent mission codes to sequential model inputs.")
     return parser
 
 
