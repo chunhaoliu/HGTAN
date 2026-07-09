@@ -1112,7 +1112,7 @@ def _score_operational_case_candidate(
     else:
         score += 2.0 * max(hgtan_stats["lead_seconds"], 0.0)
 
-    for baseline_name in ["TemporalLSTM", "TemporalHMM", "TOPSIS"]:
+    for baseline_name in ["TemporalGRU", "TemporalLSTM", "TemporalHMM", "TOPSIS"]:
         baseline_curves = model_curves.get(baseline_name)
         if not baseline_curves:
             continue

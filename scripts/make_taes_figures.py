@@ -15,6 +15,7 @@ import seaborn as sns
 
 matplotlib.rcParams["pdf.fonttype"] = 42
 matplotlib.rcParams["ps.fonttype"] = 42
+matplotlib.rcParams["svg.fonttype"] = "none"
 matplotlib.rcParams.update(
     {
         "font.size": 10.5,
@@ -37,7 +38,14 @@ from scripts.paper_assets import DEFAULT_PAPER_TAG, selected_figure_stems
 from utils.project_paths import COMPILED_ROOT, EXPERIMENT_ROOT, as_str
 
 
-CURVE_MODELS = ["TOPSIS", "TemporalHMM", "TemporalLSTM", "TemporalHGTAN"]
+CURVE_MODELS = ["TOPSIS", "TemporalHMM", "TemporalGRU", "TemporalLSTM", "TemporalHGTAN"]
+OPERATIONAL_MODEL_STYLES = {
+    "TOPSIS": {"color": "#6f7f95", "linewidth": 1.25, "alpha": 0.75, "linestyle": (0, (1.2, 1.2)), "zorder": 2},
+    "TemporalHMM": {"color": "#c5793d", "linewidth": 1.70, "alpha": 0.95, "linestyle": (0, (4.0, 2.0)), "zorder": 3},
+    "TemporalGRU": {"color": "#4c72b0", "linewidth": 1.85, "alpha": 0.95, "linestyle": "-.", "zorder": 4},
+    "TemporalLSTM": {"color": "#55a868", "linewidth": 1.85, "alpha": 0.95, "linestyle": ":", "zorder": 4},
+    "TemporalHGTAN": {"color": "#b64c4c", "linewidth": 2.45, "alpha": 1.0, "linestyle": "-", "zorder": 7},
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,11 +120,38 @@ def filter_suites(table: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame
 
 def new_panel_figure(*, width: float = 4.0, height: float = 3.2) -> tuple[plt.Figure, plt.Axes]:
     fig, ax = plt.subplots(figsize=(width, height))
-    ax.grid(True, linewidth=0.6, color="#d9d9d9")
+    ax.grid(True, linewidth=0.45, color="#e2e2e2", alpha=0.85)
     ax.tick_params(labelsize=9)
+    for side in ["top", "right"]:
+        ax.spines[side].set_visible(False)
     for spine in ax.spines.values():
         spine.set_linewidth(0.8)
     return fig, ax
+
+
+def style_panel_axis(ax: plt.Axes) -> None:
+    ax.grid(True, linewidth=0.55, color="#d9d9d9")
+    ax.tick_params(labelsize=7.4, length=2.5)
+    for side in ["top", "right"]:
+        ax.spines[side].set_visible(False)
+    for side in ["left", "bottom"]:
+        ax.spines[side].set_linewidth(0.75)
+        ax.spines[side].set_color("#777777")
+
+
+def add_panel_label(ax: plt.Axes, label: str) -> None:
+    ax.text(
+        -0.075,
+        1.035,
+        label,
+        transform=ax.transAxes,
+        ha="left",
+        va="bottom",
+        fontsize=8.6,
+        fontweight="bold",
+        color="#222222",
+        clip_on=False,
+    )
 
 
 def pretty_model_name(name: str) -> str:
@@ -126,6 +161,16 @@ def pretty_model_name(name: str) -> str:
         "TemporalLSTM": "Temp. LSTM",
         "TemporalGRU": "Temp. GRU",
         "TemporalHGTAN": "Temp. HGTAN",
+    }.get(name, name)
+
+
+def compact_model_name(name: str) -> str:
+    return {
+        "TOPSIS": "TOPSIS",
+        "TemporalHMM": "HMM",
+        "TemporalLSTM": "LSTM",
+        "TemporalGRU": "GRU",
+        "TemporalHGTAN": "HGTAN",
     }.get(name, name)
 
 
@@ -142,7 +187,13 @@ def annotate_series_label(
     ha: str = "left",
     va: str = "center",
     alpha: float = 0.82,
+    box: bool = False,
 ) -> None:
+    bbox = (
+        {"boxstyle": "round,pad=0.10", "facecolor": "white", "edgecolor": "none", "alpha": alpha}
+        if box
+        else None
+    )
     ax.text(
         x + dx,
         y + dy,
@@ -152,8 +203,62 @@ def annotate_series_label(
         ha=ha,
         va=va,
         clip_on=False,
-        bbox={"boxstyle": "round,pad=0.10", "facecolor": "white", "edgecolor": "none", "alpha": alpha},
+        bbox=bbox,
     )
+
+
+def annotate_right_label_stack(
+    ax: plt.Axes,
+    entries: list[dict[str, object]],
+    *,
+    x_label: float,
+    connector_gap: float,
+    fontsize: float = 7.4,
+    min_gap_frac: float = 0.070,
+) -> None:
+    if not entries:
+        return
+
+    ymin, ymax = ax.get_ylim()
+    span = max(ymax - ymin, 1e-6)
+    low = ymin + 0.055 * span
+    high = ymax - 0.055 * span
+    min_gap = min_gap_frac * span
+
+    ordered = sorted(entries, key=lambda item: float(item["y"]))
+    y_targets = [min(max(float(item["y"]), low), high) for item in ordered]
+    for idx in range(1, len(y_targets)):
+        if y_targets[idx] - y_targets[idx - 1] < min_gap:
+            y_targets[idx] = y_targets[idx - 1] + min_gap
+    if y_targets[-1] > high:
+        shift = y_targets[-1] - high
+        y_targets = [value - shift for value in y_targets]
+    if y_targets[0] < low:
+        shift = low - y_targets[0]
+        y_targets = [value + shift for value in y_targets]
+
+    for item, y_text in zip(ordered, y_targets):
+        x_end = float(item["x"])
+        y_end = float(item["y"])
+        color = str(item["color"])
+        if abs(y_text - y_end) > 0.02 * span:
+            ax.plot(
+                [x_end, x_label - connector_gap],
+                [y_end, y_text],
+                color=color,
+                linewidth=0.55,
+                alpha=0.50,
+                clip_on=False,
+            )
+        annotate_series_label(
+            ax,
+            x=x_label,
+            y=y_text,
+            text=str(item["text"]),
+            color=color,
+            fontsize=fontsize,
+            ha="left",
+        )
 
 
 def build_assessment_protocol_context() -> dict[str, object]:
@@ -370,33 +475,11 @@ def plot_observed_time_main_figure(summary: pd.DataFrame, out_dir: Path) -> list
         ("Threat temporal accuracy (%)", False, "fig_observed_time_dynamic_accuracy.pdf"),
         ("Critical false alarm (%)", True, "fig_observed_time_false_alarm.pdf"),
     ]
-    label_offsets = {
-        "Composite F1": {
-            "TOPSIS": (-0.35, -0.6),
-            "TemporalHMM": (-0.35, 0.6),
-            "TemporalLSTM": (-1.10, -1.65),
-            "TemporalGRU": (-0.35, 0.2),
-            "TemporalHGTAN": (-0.15, 1.25),
-        },
-        "Threat temporal accuracy (%)": {
-            "TOPSIS": (-0.35, 0.5),
-            "TemporalHMM": (-0.35, -0.5),
-            "TemporalLSTM": (-1.05, -1.35),
-            "TemporalGRU": (-0.35, 0.2),
-            "TemporalHGTAN": (-0.15, 1.25),
-        },
-        "Critical false alarm (%)": {
-            "TOPSIS": (-0.35, 0.0),
-            "TemporalHMM": (-0.35, -0.5),
-            "TemporalLSTM": (-1.00, -1.1),
-            "TemporalGRU": (-0.35, 0.4),
-            "TemporalHGTAN": (-0.15, 1.05),
-        },
-    }
     written: list[Path] = []
     for column, lower_better, filename in metric_specs:
-        fig, ax = new_panel_figure(width=4.0, height=3.35)
+        fig, ax = new_panel_figure(width=3.65, height=2.55)
         add_observed_time_regions(ax)
+        label_entries: list[dict[str, object]] = []
         for model, style in model_styles.items():
             sub = plot_df[plot_df["Model"] == model]
             if sub.empty:
@@ -408,25 +491,23 @@ def plot_observed_time_main_figure(summary: pd.DataFrame, out_dir: Path) -> list
                 color=style["color"],
                 marker=style["marker"],
                 linewidth=style["linewidth"],
-                markersize=5.0,
+                markersize=4.4,
             )
             end_x = float(sub["seconds"].iloc[-1])
             end_y = float(sub[column].iloc[-1])
-            dx, dy = label_offsets.get(column, {}).get(model, (0.25, 0.0))
-            annotate_series_label(
-                ax,
-                x=end_x,
-                y=end_y,
-                text=pretty_model_name(model),
-                color=style["color"],
-                dx=dx,
-                dy=dy,
-                fontsize=7.8,
-                ha="right",
+            label_entries.append(
+                {
+                    "x": end_x,
+                    "y": end_y,
+                    "text": compact_model_name(model),
+                    "color": style["color"],
+                }
             )
         ax.set_xlabel("Observed time (s)")
         ax.set_xticks(sorted(plot_df["seconds"].unique()))
-        ax.set_xlim(float(plot_df["seconds"].min()) - 0.5, float(plot_df["seconds"].max()) + 0.8)
+        x_min = float(plot_df["seconds"].min())
+        x_max = float(plot_df["seconds"].max())
+        ax.set_xlim(x_min - 0.5, x_max + 4.1)
         if column == "Composite F1":
             ax.set_ylabel("Composite F1 (%)")
         elif column == "Threat temporal accuracy (%)":
@@ -440,6 +521,14 @@ def plot_observed_time_main_figure(summary: pd.DataFrame, out_dir: Path) -> list
         else:
             ax.axhline(0.0, color="#444444", linewidth=0.8, alpha=0.7)
             ax.set_ylim(0.0, max(8.0, plot_df[column].max() + 4.0))
+        annotate_right_label_stack(
+            ax,
+            label_entries,
+            x_label=x_max + 0.82,
+            connector_gap=0.18,
+            fontsize=7.5,
+            min_gap_frac=0.075 if column == "Critical false alarm (%)" else 0.068,
+        )
         save(fig, out_dir / filename)
         written.append(out_dir / filename)
     return written
@@ -453,6 +542,7 @@ def plot_distance_degradation_figure(summary: pd.DataFrame, out_dir: Path) -> li
     model_styles = {
         "TOPSIS": {"color": "#7a7a7a", "marker": "o", "linewidth": 1.8},
         "TemporalHMM": {"color": "#c17c32", "marker": "s", "linewidth": 1.8},
+        "TemporalGRU": {"color": "#3967a7", "marker": "D", "linewidth": 2.0},
         "TemporalLSTM": {"color": "#4c8c68", "marker": "^", "linewidth": 2.0},
         "TemporalHGTAN": {"color": "#b04747", "marker": "o", "linewidth": 2.6},
     }
@@ -498,30 +588,11 @@ def plot_distance_degradation_figure(summary: pd.DataFrame, out_dir: Path) -> li
         ("Threat temporal accuracy (%)", False, "fig_distance_degradation_dynamic_accuracy.pdf"),
         ("Composite F1 drop from 1000 m (pp)", True, "fig_distance_degradation_drop.pdf"),
     ]
-    label_offsets = {
-        "Composite F1": {
-            "TOPSIS": (-80.0, -0.4),
-            "TemporalHMM": (-80.0, 0.4),
-            "TemporalLSTM": (-430.0, -1.25),
-            "TemporalHGTAN": (-80.0, 1.05),
-        },
-        "Threat temporal accuracy (%)": {
-            "TOPSIS": (-80.0, 0.0),
-            "TemporalHMM": (-80.0, -0.4),
-            "TemporalLSTM": (-430.0, -1.35),
-            "TemporalHGTAN": (-80.0, 1.0),
-        },
-        "Composite F1 drop from 1000 m (pp)": {
-            "TOPSIS": (-80.0, -0.2),
-            "TemporalHMM": (-80.0, 0.2),
-            "TemporalLSTM": (-450.0, 0.72),
-            "TemporalHGTAN": (-80.0, 1.02),
-        },
-    }
     written: list[Path] = []
     for panel_idx, (column, lower_better, filename) in enumerate(metric_specs):
-        fig, ax = new_panel_figure(width=4.0, height=3.35)
+        fig, ax = new_panel_figure(width=3.65, height=2.55)
         add_range_regions(ax)
+        label_entries: list[dict[str, object]] = []
         for model, style in model_styles.items():
             sub = plot_df[plot_df["Model"] == model]
             if sub.empty:
@@ -533,32 +604,29 @@ def plot_distance_degradation_figure(summary: pd.DataFrame, out_dir: Path) -> li
                 color=style["color"],
                 marker=style["marker"],
                 linewidth=style["linewidth"],
-                markersize=5.0,
+                markersize=4.4,
             )
             end_x = float(sub["Range (m)"].iloc[-1])
             end_y = float(sub[column].iloc[-1])
-            dx, dy = label_offsets.get(column, {}).get(model, (60.0, 0.0))
-            annotate_series_label(
-                ax,
-                x=end_x,
-                y=end_y,
-                text=pretty_model_name(model),
-                color=style["color"],
-                dx=dx,
-                dy=dy,
-                fontsize=7.8,
-                ha="right",
+            label_entries.append(
+                {
+                    "x": end_x,
+                    "y": end_y,
+                    "text": compact_model_name(model),
+                    "color": style["color"],
+                }
             )
         ax.set_xlabel("Nominal sensing range (m)")
-        ax.set_xticks(sorted(plot_df["Range (m)"].unique()))
-        ax.tick_params(axis="x", rotation=25)
-        ax.set_xlim(float(plot_df["Range (m)"].min()) - 120.0, float(plot_df["Range (m)"].max()) + 180.0)
+        ax.set_xticks([1000.0, 3000.0, 5000.0])
+        x_min = float(plot_df["Range (m)"].min())
+        x_max = float(plot_df["Range (m)"].max())
+        ax.set_xlim(x_min - 120.0, x_max + 930.0)
         if column == "Composite F1":
             ax.set_ylabel("Composite F1 (%)")
         elif column == "Threat temporal accuracy (%)":
             ax.set_ylabel("Threat temporal accuracy (%)")
         else:
-            ax.set_ylabel("Composite-F1 change (pp)")
+            ax.set_ylabel("F1 loss from 1000 m (pp)")
         if column == "Composite F1 drop from 1000 m (pp)":
             ax.axhline(0.0, color="#444444", linewidth=0.8, linestyle="--", alpha=0.75)
             ax.set_ylim(min(-1.0, plot_df[column].min() - 0.5), max(2.0, plot_df[column].max() + 0.7))
@@ -567,11 +635,222 @@ def plot_distance_degradation_figure(summary: pd.DataFrame, out_dir: Path) -> li
         if panel_idx == 0:
             secax = ax.secondary_xaxis("top", functions=(range_to_noise_multiplier, noise_multiplier_to_range))
             secax.set_xlabel("Noise multiplier")
-            secax.set_xticks([1.0, 1.5, 2.0, 2.5, 3.0])
+            secax.set_xticks([1.0, 2.0, 3.0])
             secax.tick_params(labelsize=8, pad=1)
+        annotate_right_label_stack(
+            ax,
+            label_entries,
+            x_label=x_max + 230.0,
+            connector_gap=45.0,
+            fontsize=7.5,
+            min_gap_frac=0.072,
+        )
         save(fig, out_dir / filename)
         written.append(out_dir / filename)
     return written
+
+
+def plot_operational_case_composite(
+    *,
+    features: np.ndarray,
+    clean_features: np.ndarray,
+    threat_true: np.ndarray,
+    time_axis: np.ndarray,
+    x_pos: np.ndarray,
+    y_pos: np.ndarray,
+    noisy_x: np.ndarray,
+    noisy_y: np.ndarray,
+    true_first: int,
+    timing_rows: list[dict[str, float | int | str]],
+    model_curves: dict,
+    keep_models: list[str],
+    out_dir: Path,
+) -> Path:
+    event_time = float(time_axis[true_first]) if true_first >= 0 else float("nan")
+    time_end = float(time_axis[-1])
+    fig = plt.figure(figsize=(7.20, 6.05))
+    grid = fig.add_gridspec(
+        3,
+        2,
+        height_ratios=[1.02, 1.00, 0.96],
+        width_ratios=[1.00, 1.08],
+        hspace=0.66,
+        wspace=0.34,
+    )
+    ax_traj = fig.add_subplot(grid[0, 0])
+    ax_signal = fig.add_subplot(grid[0, 1])
+    ax_curve = fig.add_subplot(grid[1, :])
+    ax_alarm = fig.add_subplot(grid[2, :])
+    for ax in [ax_traj, ax_signal, ax_curve, ax_alarm]:
+        style_panel_axis(ax)
+
+    ax_traj.plot(x_pos, y_pos, linewidth=1.75, color="#2f4b66", label="Clean reference", zorder=3)
+    ax_traj.scatter(noisy_x, noisy_y, s=9, color="#b46a5a", alpha=0.42, label="Observed samples", zorder=2)
+    ax_traj.scatter(x_pos[0], y_pos[0], color="#5d8a6a", s=28, edgecolor="#222222", linewidth=0.35, zorder=5, label="Start")
+    ax_traj.scatter(x_pos[-1], y_pos[-1], color="#222222", s=34, edgecolor="white", linewidth=0.35, zorder=5, label="Final")
+    if true_first >= 0:
+        ax_traj.scatter(
+            x_pos[true_first],
+            y_pos[true_first],
+            marker="*",
+            color="#b64c4c",
+            edgecolor="#222222",
+            linewidth=0.40,
+            s=92,
+            zorder=6,
+            label="_nolegend_",
+        )
+        ax_traj.annotate(
+            f"Critical event\n{event_time:.1f} s",
+            xy=(x_pos[true_first], y_pos[true_first]),
+            xytext=(8, -21),
+            textcoords="offset points",
+            fontsize=6.9,
+            color="#333333",
+            arrowprops={"arrowstyle": "-", "color": "#555555", "linewidth": 0.55},
+            bbox={"boxstyle": "round,pad=0.12", "facecolor": "white", "edgecolor": "none", "alpha": 0.84},
+        )
+    ax_traj.set_xlabel("Relative x", fontsize=8.0)
+    ax_traj.set_ylabel("Relative y", fontsize=8.0)
+    ax_traj.legend(
+        loc="lower right",
+        fontsize=6.2,
+        frameon=False,
+        handlelength=1.3,
+        borderaxespad=0.1,
+        ncol=2,
+        columnspacing=0.75,
+    )
+    add_panel_label(ax_traj, "(a)")
+
+    signal_specs = [
+        ("Heading", 6, "#6f8f78", 0.035),
+        ("Distance", 8, "#4d7fa8", 0.000),
+        ("Time-to-arrival", 11, "#b65f4f", -0.035),
+    ]
+    for feature_name, feature_idx, color, label_offset in signal_specs:
+        ax_signal.plot(time_axis, features[:, feature_idx], linewidth=1.65, color=color)
+        ax_signal.plot(time_axis, clean_features[:, feature_idx], linewidth=0.85, color=color, alpha=0.35, linestyle="--")
+        annotate_series_label(
+            ax_signal,
+            x=time_end,
+            y=float(features[-1, feature_idx]),
+            text=feature_name,
+            color=color,
+            dx=0.18,
+            dy=label_offset,
+            fontsize=6.8,
+            alpha=0.80,
+        )
+    if true_first >= 0:
+        ax_signal.axvline(event_time, color="#333333", linewidth=0.9, linestyle="--")
+        ax_signal.text(
+            event_time - 0.12,
+            0.96,
+            "Reference event",
+            ha="right",
+            va="top",
+            fontsize=6.7,
+            color="#333333",
+            bbox={"boxstyle": "round,pad=0.10", "facecolor": "white", "edgecolor": "none", "alpha": 0.82},
+        )
+    ax_signal.set_xlabel("Time (s)", fontsize=8.0)
+    ax_signal.set_ylabel("Normalized value", fontsize=8.0)
+    ax_signal.set_xlim(float(time_axis[0]) - 0.2, time_end + 1.55)
+    ax_signal.set_ylim(0, 1)
+    add_panel_label(ax_signal, "(b)")
+
+    ax_curve.axhspan(4, 5.2, color="#b64c4c", alpha=0.075, zorder=0)
+    ax_curve.step(time_axis, threat_true, where="post", label="Clean reference", linewidth=2.45, color="#222222", zorder=8)
+    for model in keep_models:
+        style = OPERATIONAL_MODEL_STYLES.get(model, {"linewidth": 1.7, "alpha": 0.9, "linestyle": "-", "zorder": 3})
+        ax_curve.step(
+            time_axis,
+            model_curves[model]["threat_pred"],
+            where="post",
+            label=pretty_model_name(model),
+            linewidth=style.get("linewidth", 1.7),
+            color=style.get("color", None),
+            alpha=style.get("alpha", 0.9),
+            linestyle=style.get("linestyle", "-"),
+            zorder=style.get("zorder", 3),
+        )
+    if true_first >= 0:
+        ax_curve.axvline(event_time, color="#333333", linewidth=0.9, linestyle="--")
+    ax_curve.text(time_end - 0.05, 4.82, "Critical zone", ha="right", va="center", fontsize=6.9, color="#7f3f3f")
+    ax_curve.set_xlabel("Time (s)", fontsize=8.0)
+    ax_curve.set_ylabel("Threat level", fontsize=8.0)
+    ax_curve.set_yticks([1, 2, 3, 4, 5])
+    ax_curve.set_ylim(0.8, 5.2)
+    ax_curve.set_xlim(float(time_axis[0]) - 0.15, time_end + 0.35)
+    ax_curve.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=6,
+        fontsize=6.7,
+        frameon=False,
+        handlelength=2.0,
+        columnspacing=0.95,
+        borderaxespad=0.0,
+    )
+    add_panel_label(ax_curve, "(c)")
+
+    timing_df = pd.DataFrame(timing_rows)
+    if not timing_df.empty:
+        y_positions = np.arange(len(timing_df))
+        if true_first >= 0:
+            ax_alarm.axvspan(0.0, event_time, color="#b64c4c", alpha=0.060, zorder=0)
+            ax_alarm.axvline(event_time, color="#222222", linewidth=1.0, linestyle="--", zorder=2)
+            ax_alarm.text(event_time + 0.10, -0.42, f"Reference {event_time:.1f} s", fontsize=6.8, color="#222222")
+        metric_x = time_end + 1.35
+        for y_pos_i, row in zip(y_positions, timing_rows):
+            model_name = str(row["Model"])
+            alarm_t = float(row["Alarm time (s)"])
+            false_frames = int(row["False frames"])
+            mae = float(row["MAE"])
+            ax_alarm.hlines(y_pos_i, 0.0, time_end, color="#d9d9d9", linewidth=3.1, zorder=1)
+            if np.isfinite(alarm_t):
+                if model_name == "Clean reference":
+                    color = "#222222"
+                    marker = "D"
+                    size = 38
+                else:
+                    color = OPERATIONAL_MODEL_STYLES.get(model_name, {}).get("color", "#405d7d")
+                    marker = "o" if false_frames == 0 else "s"
+                    size = 42 if false_frames == 0 else 48
+                ax_alarm.scatter(alarm_t, y_pos_i, s=size, color=color, marker=marker, edgecolor="#222222", linewidth=0.40, zorder=4)
+                if model_name != "Clean reference":
+                    label_x = min(alarm_t + 0.16, time_end - 0.55)
+                    label_ha = "left"
+                    if alarm_t > time_end - 1.0:
+                        label_x = alarm_t - 0.16
+                        label_ha = "right"
+                    ax_alarm.text(
+                        label_x,
+                        y_pos_i + 0.20,
+                        f"{alarm_t:.1f}s",
+                        ha=label_ha,
+                        va="bottom",
+                        fontsize=6.7,
+                        bbox={"boxstyle": "round,pad=0.08", "facecolor": "white", "edgecolor": "none", "alpha": 0.78},
+                    )
+            metric_text = "-- / --" if model_name == "Clean reference" else f"{false_frames:d} / {mae:.2f}"
+            ax_alarm.text(metric_x, y_pos_i, metric_text, ha="left", va="center", fontsize=6.8, color="#333333")
+        ax_alarm.text(metric_x, -0.62, "False frames / MAE", ha="left", va="bottom", fontsize=6.8, color="#333333")
+        ax_alarm.set_yticks(y_positions)
+        ax_alarm.set_yticklabels([pretty_model_name(name) if name != "Clean reference" else name for name in timing_df["Model"]])
+        ax_alarm.set_xlim(-0.45, time_end + 2.55)
+        ax_alarm.set_xlabel("First critical-alarm time (s)", fontsize=8.0)
+        ax_alarm.set_ylim(len(timing_df) - 0.45, -0.85)
+    else:
+        ax_alarm.text(0.5, 0.5, "No critical event in this sequence", transform=ax_alarm.transAxes, ha="center", va="center", fontsize=8.0)
+        ax_alarm.set_axis_off()
+    add_panel_label(ax_alarm, "(d)")
+
+    path = out_dir / "fig_operational_case_composite.pdf"
+    fig.subplots_adjust(left=0.105, right=0.965, bottom=0.070, top=0.965)
+    save(fig, path, tight=False)
+    return path
 
 
 def plot_operational_case_figure(case: dict, out_dir: Path) -> list[Path]:
@@ -591,22 +870,31 @@ def plot_operational_case_figure(case: dict, out_dir: Path) -> list[Path]:
     keep_models = [model for model in CURVE_MODELS if model in model_curves]
     true_first = first_critical(threat_true, [4, 5])
     timing_rows = operational_timing_rows(case)
-    fig, ax = new_panel_figure(width=4.2, height=3.15)
-    ax.plot(x_pos, y_pos, marker="o", markersize=2.0, linewidth=2.0, color="#405d7d", label="Clean truth")
+    fig, ax = new_panel_figure(width=4.15, height=2.55)
+    ax.plot(x_pos, y_pos, marker="o", markersize=2.0, linewidth=2.0, color="#405d7d", label="Clean reference")
     ax.scatter(noisy_x, noisy_y, s=13, color="#b45f4d", alpha=0.45, label="Observed samples")
-    ax.plot(noisy_x, noisy_y, linewidth=0.9, color="#b45f4d", alpha=0.35)
     ax.scatter(x_pos[0], y_pos[0], color="#6d9276", s=36, zorder=4, label="Start")
     ax.scatter(x_pos[-1], y_pos[-1], color="#222222", s=42, zorder=4, label="Final")
-    ax.scatter(x_pos[turn_idx], y_pos[turn_idx], color="#b45f4d", s=50, zorder=5, label="Key turn")
-    ax.annotate("maneuver", xy=(x_pos[turn_idx], y_pos[turn_idx]), xytext=(8, 10), textcoords="offset points", fontsize=8)
+    if true_first >= 0:
+        ax.scatter(
+            x_pos[true_first],
+            y_pos[true_first],
+            marker="*",
+            color="#c44e52",
+            edgecolor="#222222",
+            linewidth=0.45,
+            s=95,
+            zorder=6,
+            label="Reference event",
+        )
     ax.set_xlabel("Relative x")
     ax.set_ylabel("Relative y")
-    ax.legend(fontsize=7, ncol=2, frameon=True)
+    ax.legend(fontsize=7, ncol=2, frameon=False, handlelength=1.2, columnspacing=0.8)
     path = out_dir / "fig_operational_case_trajectory.pdf"
     save(fig, path)
     written.append(path)
 
-    fig, ax = new_panel_figure(width=4.2, height=3.15)
+    fig, ax = new_panel_figure(width=4.15, height=2.55)
     signal_offsets = {
         "Distance": (0.10, 0.03),
         "Heading": (0.10, -0.02),
@@ -624,7 +912,7 @@ def plot_operational_case_figure(case: dict, out_dir: Path) -> list[Path]:
             ax,
             x=float(time_axis[-1]),
             y=float(features[-1, feature_idx]),
-            text=f"Obs. {feature_name.lower()}",
+            text=feature_name,
             color=color,
             dx=dx,
             dy=dy,
@@ -632,17 +920,6 @@ def plot_operational_case_figure(case: dict, out_dir: Path) -> list[Path]:
         )
     if true_first >= 0:
         ax.axvline(time_axis[true_first], color="#444444", linewidth=1.0, linestyle="--")
-        ax.annotate(
-            "truth critical event",
-            xy=(time_axis[true_first], 0.98),
-            xytext=(-4, -6),
-            textcoords="offset points",
-            va="top",
-            ha="right",
-            fontsize=7.2,
-            color="#333333",
-            bbox={"boxstyle": "round,pad=0.12", "facecolor": "white", "edgecolor": "none", "alpha": 0.82},
-        )
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Normalized value")
     ax.set_xlim(float(time_axis[0]) - 0.3, float(time_axis[-1]) + 0.95)
@@ -651,12 +928,13 @@ def plot_operational_case_figure(case: dict, out_dir: Path) -> list[Path]:
     save(fig, path)
     written.append(path)
 
-    fig, ax = new_panel_figure(width=8.7, height=3.20)
+    fig, ax = new_panel_figure(width=7.35, height=2.15)
     ax.axhspan(4, 5.2, color="#b45f4d", alpha=0.09, label="Critical zone")
-    ax.step(time_axis, threat_true, where="post", label="Clean truth", linewidth=2.9, color="#222222", zorder=6)
+    ax.step(time_axis, threat_true, where="post", label="Clean reference", linewidth=2.9, color="#222222", zorder=6)
     curve_styles = {
         "TOPSIS": {"color": "#3967a7", "linewidth": 1.35, "alpha": 0.58, "zorder": 2},
         "TemporalHMM": {"color": "#dd8452", "linewidth": 1.85, "alpha": 0.95, "zorder": 3},
+        "TemporalGRU": {"color": "#4c72b0", "linewidth": 1.95, "alpha": 0.95, "zorder": 4},
         "TemporalLSTM": {"color": "#55a868", "linewidth": 1.95, "alpha": 0.95, "zorder": 4},
         "TemporalHGTAN": {"color": "#c44e52", "linewidth": 2.65, "alpha": 1.0, "zorder": 7},
     }
@@ -678,61 +956,61 @@ def plot_operational_case_figure(case: dict, out_dir: Path) -> list[Path]:
     ax.set_ylabel("Threat level")
     ax.set_yticks([1, 2, 3, 4, 5])
     ax.set_ylim(0.8, 5.2)
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=3, frameon=False, borderaxespad=0.0, fontsize=8.0)
+    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=6, frameon=False, borderaxespad=0.0, fontsize=7.4)
     path = out_dir / "fig_operational_case_curves.pdf"
-    save(fig, path, top_pad=0.87)
+    save(fig, path, top_pad=0.82)
     written.append(path)
 
     if timing_rows:
         timing_df = pd.DataFrame(timing_rows)
         y_positions = np.arange(len(timing_df))
 
-        fig, ax = new_panel_figure(width=4.2, height=3.05)
+        fig, ax = new_panel_figure(width=7.35, height=1.80)
+        ax.grid(False)
         ax.axvspan(0.0, time_axis[true_first] if true_first >= 0 else 0.0, color="#b45f4d", alpha=0.08, label="Pre-critical interval")
         if true_first >= 0:
-            ax.axvline(time_axis[true_first], color="#222222", linewidth=1.2, linestyle="--", label="Truth critical event")
+            ax.axvline(time_axis[true_first], color="#222222", linewidth=1.2, linestyle="--", label="Reference critical event")
+        metric_x = float(time_axis[-1]) + 1.05
         for y_pos_i, row in zip(y_positions, timing_rows):
             alarm_t = row["Alarm time (s)"]
+            model_name = str(row["Model"])
             ax.hlines(y_pos_i, 0.0, time_axis[-1], color="#d8d8d8", linewidth=4.0, zorder=1)
             if np.isfinite(alarm_t):
-                color = "#b45f4d" if row["False frames"] > 0 else "#4c8c68"
-                ax.scatter(alarm_t, y_pos_i, s=58, color=color, edgecolor="#222222", linewidth=0.5, zorder=3)
-                text_x = min(float(alarm_t) + 0.18, float(time_axis[-1]) - 0.55)
-                text_y = y_pos_i + 0.22
-                ha = "left"
-                if alarm_t > time_axis[-1] - 1.2:
-                    text_x = float(alarm_t) - 0.22
-                    ha = "right"
-                ax.text(
-                    text_x,
-                    text_y,
-                    f"{alarm_t:.1f}s",
-                    ha=ha,
-                    va="bottom",
-                    fontsize=7.2,
-                    bbox={"boxstyle": "round,pad=0.08", "facecolor": "white", "edgecolor": "none", "alpha": 0.76},
-                )
+                if model_name == "Clean reference":
+                    color = "#222222"
+                    marker = "D"
+                    size = 48
+                else:
+                    color = OPERATIONAL_MODEL_STYLES.get(model_name, {}).get("color", "#405d7d")
+                    marker = "s" if row["False frames"] > 0 else "o"
+                    size = 56 if row["False frames"] > 0 else 50
+                ax.scatter(alarm_t, y_pos_i, s=size, color=color, marker=marker, edgecolor="#222222", linewidth=0.5, zorder=3)
+            metric_text = "-- / --" if model_name == "Clean reference" else f"{int(row['False frames'])} / {float(row['MAE']):.2f}"
+            ax.text(metric_x, y_pos_i, metric_text, ha="left", va="center", fontsize=7.0, color="#333333")
+        ax.text(metric_x, -0.55, "False / MAE", ha="left", va="bottom", fontsize=7.0, color="#333333")
         ax.set_yticks(y_positions)
-        ax.set_yticklabels([pretty_model_name(name) if name != "Clean truth" else name for name in timing_df["Model"]])
-        ax.set_xlim(-0.8, time_axis[-1] + 0.4)
+        ax.set_yticklabels([pretty_model_name(name) if name != "Clean reference" else name for name in timing_df["Model"]])
+        ax.set_xlim(-0.35, time_axis[-1] + 2.1)
         ax.set_xlabel("First critical-alarm time (s)")
         ax.invert_yaxis()
         path = out_dir / "fig_operational_case_alarm_timing.pdf"
-        fig.subplots_adjust(left=0.14, right=0.98, bottom=0.24, top=0.98, wspace=0.10)
+        fig.subplots_adjust(left=0.13, right=0.97, bottom=0.28, top=0.94, wspace=0.10)
         save(fig, path, tight=False)
         written.append(path)
 
-        trade_df = timing_df[timing_df["Model"] != "Clean truth"].copy()
+        trade_df = timing_df[timing_df["Model"] != "Clean reference"].copy()
         fig, ax = new_panel_figure(width=4.25, height=3.05)
         color_map = {
             "TOPSIS": "#7a7a7a",
             "TemporalHMM": "#c17c32",
+            "TemporalGRU": "#3967a7",
             "TemporalLSTM": "#4c8c68",
             "TemporalHGTAN": "#b04747",
         }
         text_offsets = {
             "TOPSIS": (1.5, 0.20),
             "TemporalHMM": (0.30, -0.25),
+            "TemporalGRU": (1.0, 0.08),
             "TemporalLSTM": (1.5, -0.18),
             "TemporalHGTAN": (0.30, 0.22),
         }
@@ -884,7 +1162,7 @@ def score_operational_case(case: dict) -> float:
     if -1.0 <= hgtan_stats["lead_seconds"] <= 0.4:
         score += 8.0
 
-    for baseline_name in ["TemporalLSTM", "TemporalHMM", "TOPSIS"]:
+    for baseline_name in ["TemporalGRU", "TemporalLSTM", "TemporalHMM", "TOPSIS"]:
         baseline = case.get("models", {}).get(baseline_name, {}).get("threat_pred")
         if baseline is None:
             continue
@@ -942,6 +1220,10 @@ def generate_protocol_case() -> dict:
             "TemporalLSTM": {
                 "threat_pred": delayed_curve(threat_seq[case_idx], delay=4),
                 "urgency_pred": delayed_curve(urgency_seq[case_idx], delay=4),
+            },
+            "TemporalGRU": {
+                "threat_pred": delayed_curve(threat_seq[case_idx], delay=3),
+                "urgency_pred": delayed_curve(urgency_seq[case_idx], delay=3),
             },
             "TemporalHGTAN": {
                 "threat_pred": delayed_curve(threat_seq[case_idx], delay=1),
@@ -1027,7 +1309,7 @@ def operational_timing_rows(case: dict) -> list[dict[str, float | int | str]]:
     frame_interval = float(case.get("frame_interval", 0.2))
     rows: list[dict[str, float | int | str]] = [
         {
-            "Model": "Clean truth",
+            "Model": "Clean reference",
             "Alarm time (s)": true_first * frame_interval,
             "Lead time (s)": 0.0,
             "False frames": 0,
@@ -1115,11 +1397,19 @@ def resolve_distance_suite(summary: pd.DataFrame) -> str | None:
         return suite
     if summary.empty or "source_suite" not in summary.columns:
         return None
+    best_suite = None
+    best_count = 0
     for source_suite, group in summary.groupby("source_suite"):
-        settings = group["setting"].dropna().astype(str)
-        if settings.str.contains("range", regex=False).sum() >= 2:
-            return str(source_suite)
-    return None
+        if "range_m" in group.columns:
+            range_values = pd.to_numeric(group["range_m"], errors="coerce").dropna().unique()
+            count = len(range_values)
+        else:
+            settings = group["setting"].dropna().astype(str)
+            count = settings[settings.str.contains("range", regex=False)].nunique()
+        if count > best_count:
+            best_suite = str(source_suite)
+            best_count = count
+    return best_suite if best_count >= 2 else None
 
 
 def first_existing_setting(summary: pd.DataFrame, suite: str, candidates: list[str]) -> str | None:
@@ -1272,7 +1562,7 @@ def caption_for_stem(stem: str) -> str:
         "fig_observed_time_false_alarm": "Observed-time sensitivity in critical false-alarm rate",
         "fig_distance_degradation_composite_f1": "Range-degradation sensitivity in composite F1",
         "fig_distance_degradation_dynamic_accuracy": "Range-degradation sensitivity in threat temporal accuracy",
-        "fig_distance_degradation_drop": "Range-degradation sensitivity in composite-F1 drop",
+        "fig_distance_degradation_drop": "Range-degradation sensitivity in composite-F1 loss from the 1000 m setting",
         "fig_operational_case_trajectory": "Operational-case trajectory proxies",
         "fig_operational_case_signals": "Operational-case key signals",
         "fig_operational_case_curves": "Operational-case dynamic threat curves",

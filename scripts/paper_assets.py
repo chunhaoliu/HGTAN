@@ -10,10 +10,19 @@ DEFAULT_PAPER_TAG = "taes_main"
 
 PAPER_FIGURE_LAYERS = {
     "main": [
-        "fig_assessment_protocol_details",
-        "fig_observed_time_main",
-        "fig_distance_degradation_main",
-        "fig_operational_case_composite",
+        "fig_assessment_protocol_quantification",
+        "fig_assessment_protocol_tracks",
+        "fig_assessment_protocol_degradation",
+        "fig_observed_time_composite_f1",
+        "fig_observed_time_dynamic_accuracy",
+        "fig_observed_time_false_alarm",
+        "fig_distance_degradation_composite_f1",
+        "fig_distance_degradation_dynamic_accuracy",
+        "fig_distance_degradation_drop",
+        "fig_operational_case_trajectory",
+        "fig_operational_case_signals",
+        "fig_operational_case_curves",
+        "fig_operational_case_alarm_timing",
     ],
     "appendix": [],
 }

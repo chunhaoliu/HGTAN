@@ -59,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     output.add_argument("--dry-run", action="store_true", help="Print and save the run manifest only.")
     output.add_argument("--skip-existing", action="store_true", help="Skip complete setting outputs and reuse their summaries.")
+    output.add_argument("--out-root", default=None, help="Override the experiment output root directory.")
     output.add_argument("--out-subdir", default=None)
 
     training.add_argument("--n-samples", type=int, default=None)
@@ -71,11 +72,22 @@ def build_parser() -> argparse.ArgumentParser:
     training.add_argument("--learning_rate", type=float, default=None)
     training.add_argument("--weight_decay", type=float, default=None)
     training.add_argument("--patience", type=int, default=None)
+    training.add_argument("--urgency_weight", type=float, default=None)
+    training.add_argument("--threat_weight", type=float, default=None)
+    training.add_argument("--label_smoothing", type=float, default=None)
+    training.add_argument("--mixup_alpha", type=float, default=None)
+    training.add_argument("--loss_type_threat", default=None, choices=["ce", "focal"])
+    training.add_argument("--loss_type_urgency", default=None, choices=["ce", "focal"])
+    training.add_argument("--focal_gamma", type=float, default=None)
+    training.add_argument("--class_weight_max", type=float, default=None)
+    add_toggle_flag(training, name="mixup", dest="use_mixup", help_text="Enable mixup augmentation.")
     training.add_argument("--d_model", type=int, default=None)
     training.add_argument("--n_heads", type=int, default=None)
     training.add_argument("--e_layers", type=int, default=None)
     training.add_argument("--d_ff", type=int, default=None)
     training.add_argument("--dropout", type=float, default=None)
+    training.add_argument("--prior_weight_alpha", type=float, default=None)
+    add_toggle_flag(training, name="prior_weights", dest="use_prior_weights", help_text="Enable prior-weight fusion.")
 
     runtime.add_argument("--num_workers", type=int, default=None, help="DataLoader workers for GPU feeding.")
     runtime.add_argument("--prefetch_factor", type=int, default=None, help="Batches prefetched per DataLoader worker.")
@@ -121,7 +133,8 @@ def resolve_selected_models(args: argparse.Namespace, task_form: str) -> list[st
 
 
 def build_out_root(args: argparse.Namespace) -> Path:
-    return EXPERIMENT_ROOT / (args.out_subdir or args.suite)
+    base_root = Path(args.out_root) if args.out_root else EXPERIMENT_ROOT
+    return base_root / (args.out_subdir or args.suite)
 
 
 def build_assessment_options(args: argparse.Namespace, selected_models: list[str], out_root: Path) -> AssessmentOptions:

@@ -267,7 +267,16 @@ ASSESSMENT_SUITES: dict[str, dict[str, Any]] = {
 
 
 TRADITIONAL_MODELS = ["TOPSIS", "GRA", "Fuzzy", "Entropy-TOPSIS", "Combined-TOPSIS", "TemporalHMM"]
-TEMPORAL_MODELS = ["LastFrameMLP", "MeanPoolMLP", "TemporalGRU", "TemporalLSTM", "TemporalHGTAN"]
+TEMPORAL_MODELS = [
+    "LastFrameMLP",
+    "MeanPoolMLP",
+    "FlatSequenceMLP",
+    "TemporalGRU",
+    "TemporalLSTM",
+    "TemporalTransformer",
+    "TemporalTCN",
+    "TemporalHGTAN",
+]
 SEQ_ABLATION_MODELS = [
     "TemporalHGTAN",
     "TemporalHGTAN_LastFrame",
@@ -279,7 +288,7 @@ SEQ_ABLATION_MODELS = [
 
 MODEL_GROUPS: dict[str, list[str]] = {
     "traditional": TRADITIONAL_MODELS,
-    "seq_curve": ["TOPSIS", "TemporalHMM", "TemporalLSTM", "TemporalHGTAN"],
+    "seq_curve": ["TOPSIS", "TemporalHMM", "TemporalGRU", "TemporalLSTM", "TemporalHGTAN"],
     "seq_lite": ["LastFrameMLP", "TemporalHGTAN"],
     "seq_main": TRADITIONAL_MODELS + TEMPORAL_MODELS,
     "seq_ablation": SEQ_ABLATION_MODELS,

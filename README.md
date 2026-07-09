@@ -19,6 +19,8 @@ Everything else has been pushed out of the formal path or removed.
 - `run.py`: the only main Python entry.
 
 Runtime outputs are written outside this tree to `../Outputs/atuav_assessment/`.
+If the OneDrive-backed output directory is not writable in a local sandbox, pass
+`--out-root <writable-output-root>` and keep the same `--out-subdir` names.
 
 ## Official Experiments
 
@@ -68,8 +70,8 @@ On Windows, `--num_workers 0 --no_persistent_workers` is the stable fallback whe
 
 - `traditional`: TOPSIS, GRA, Fuzzy, Entropy-TOPSIS, Combined-TOPSIS, TemporalHMM
 - `seq_lite`: LastFrameMLP, TemporalHGTAN
-- `seq_main`: traditional baselines plus LastFrameMLP, MeanPoolMLP, TemporalGRU, TemporalLSTM, TemporalHGTAN
-- `seq_curve`: TOPSIS, TemporalHMM, TemporalLSTM, TemporalHGTAN for dynamic-curve and sensitivity figures
+- `seq_main`: traditional baselines plus LastFrameMLP, MeanPoolMLP, FlatSequenceMLP, TemporalGRU, TemporalLSTM, TemporalTransformer, TemporalTCN, TemporalHGTAN
+- `seq_curve`: TOPSIS, TemporalHMM, TemporalGRU, TemporalLSTM, TemporalHGTAN for dynamic-curve and sensitivity figures
 - `seq_ablation`: TemporalHGTAN, TemporalHGTAN_LastFrame, TemporalHGTAN_MeanPool, TemporalHGTAN_NoSynergy, TemporalHGTAN_NoPrior
 
 For the classical dual-task baselines, each MCDM family now uses its own urgency scorer on an urgency-relevant indicator subset instead of sharing one identical urgency rule across every static method.

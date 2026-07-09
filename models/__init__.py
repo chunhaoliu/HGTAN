@@ -24,10 +24,13 @@ from models.model_factory import (
     validate_model_names,
 )
 from models.temporal_baselines import (
+    FlatSequenceMLPBaseline,
     LastFrameMLPBaseline,
     MeanPoolMLPBaseline,
     TemporalGRUBaseline,
     TemporalLSTMBaseline,
+    TemporalTCNBaseline,
+    TemporalTransformerBaseline,
 )
 from models.traditional_baselines import TRADITIONAL_MODEL_NAMES, get_traditional_models
 
@@ -52,8 +55,11 @@ __all__ = [
     "GraphSAGEBaseline",
     "LastFrameMLPBaseline",
     "MeanPoolMLPBaseline",
+    "FlatSequenceMLPBaseline",
     "TemporalGRUBaseline",
     "TemporalLSTMBaseline",
+    "TemporalTransformerBaseline",
+    "TemporalTCNBaseline",
     "TRAINABLE_MODELS",
     "SEQUENTIAL_MODELS",
     "TRADITIONAL_MODEL_NAMES",

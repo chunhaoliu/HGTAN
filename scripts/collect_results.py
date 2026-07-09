@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
 from utils.project_paths import BENCHMARK_ROOT, COMPILED_ROOT, as_str
 
 
-DEFAULT_ARTIFACTS = ["summary.csv"]
+DEFAULT_ARTIFACTS = ["summary.csv", "run_metrics.csv"]
 
 
 def parse_args() -> argparse.Namespace:

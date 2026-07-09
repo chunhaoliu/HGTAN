@@ -25,10 +25,23 @@ COMPARISON_MODELS = [
     "TemporalHMM",
     "LastFrameMLP",
     "MeanPoolMLP",
+    "FlatSequenceMLP",
     "TemporalGRU",
     "TemporalLSTM",
+    "TemporalTransformer",
+    "TemporalTCN",
     "TemporalHGTAN",
 ]
+COMPARISON_LABELS = {
+    "LastFrameMLP": "Last-frame MLP",
+    "MeanPoolMLP": "Mean-pooling MLP",
+    "FlatSequenceMLP": "Flat-sequence MLP",
+    "TemporalGRU": "Temporal GRU",
+    "TemporalLSTM": "Temporal LSTM",
+    "TemporalTransformer": "Temporal Transformer",
+    "TemporalTCN": "Temporal TCN",
+    "TemporalHGTAN": "Temporal HGTAN",
+}
 ABLATION_MODELS = [
     "TemporalHGTAN",
     "TemporalHGTAN_LastFrame",
@@ -104,25 +117,47 @@ def make_comparison_table(summary: pd.DataFrame) -> str | None:
     if setting is None:
         return None
 
-    rows = []
+    raw_rows = []
     for model in COMPARISON_MODELS:
         if not has_model(summary, suite, setting, model):
             continue
+        raw_rows.append(
+            {
+                "model": model,
+                "label": latex_escape(COMPARISON_LABELS.get(model, model)),
+                "threat_f1": metric(summary, suite, setting, model, "threat", "f1"),
+                "urgency_f1": metric(summary, suite, setting, model, "urgency", "f1"),
+                "composite_f1": metric(summary, suite, setting, model, "joint", "composite_f1"),
+                "temporal_accuracy": metric(summary, suite, setting, model, "threat_track", "temporal_accuracy"),
+                "critical_miss": metric(summary, suite, setting, model, "threat_track", "critical_track_miss_rate"),
+                "latency": metric(summary, suite, setting, model, "efficiency", "inference_time_ms_per_sample"),
+            }
+        )
+    if not raw_rows:
+        return None
+    highlighted = {
+        key: highlight_flags(raw_rows, key, larger_is_better=True)
+        for key in ["threat_f1", "urgency_f1", "composite_f1", "temporal_accuracy"]
+    }
+    rows = []
+    for row in raw_rows:
+        model = row["model"]
         rows.append(
             [
-                latex_escape(model),
-                fmt(metric(summary, suite, setting, model, "threat", "f1")),
-                fmt(metric(summary, suite, setting, model, "urgency", "f1")),
-                fmt(metric(summary, suite, setting, model, "joint", "composite_f1")),
-                fmt(metric(summary, suite, setting, model, "threat_track", "temporal_accuracy")),
-                fmt(metric(summary, suite, setting, model, "threat_track", "critical_track_miss_rate")),
-                fmt_number(metric(summary, suite, setting, model, "efficiency", "inference_time_ms_per_sample")),
+                row["label"],
+                fmt(row["threat_f1"], highlight=highlighted["threat_f1"].get(model)),
+                fmt(row["urgency_f1"], highlight=highlighted["urgency_f1"].get(model)),
+                fmt(row["composite_f1"], highlight=highlighted["composite_f1"].get(model)),
+                fmt(row["temporal_accuracy"], highlight=highlighted["temporal_accuracy"].get(model)),
+                fmt(row["critical_miss"]),
+                fmt_number(row["latency"]),
             ]
         )
-    if not rows:
-        return None
     return latex_table(
-        caption="Comparison experiment on the default sequential protocol without oracle target-type input.",
+        caption=(
+            "Comparison experiment on the default sequential protocol without oracle target-type input. "
+            "Bold and underline mark the best and second-best values among reported models for the four main score columns."
+        ),
         label="tab:comparison_experiment",
         columns=["Model", "Threat F1", "Urgency F1", "Comp. F1", "Threat T-Acc.", "Crit. Miss", "ms/sample"],
         rows=rows,
@@ -139,22 +174,42 @@ def make_ablation_table(summary: pd.DataFrame) -> str | None:
     if default_setting is None:
         return None
 
-    rows = []
+    raw_rows = []
     for model in ABLATION_MODELS:
         if not has_model(summary, suite, default_setting, model):
             continue
+        raw_rows.append(
+            {
+                "model": model,
+                "label": latex_escape(ABLATION_LABELS.get(model, model)),
+                "default_f1": metric(summary, suite, default_setting, model, "joint", "composite_f1"),
+                "short_f1": metric(summary, suite, short_setting, model, "joint", "composite_f1") if short_setting else None,
+                "far_f1": metric(summary, suite, far_setting, model, "joint", "composite_f1") if far_setting else None,
+                "critical_recall": metric(summary, suite, default_setting, model, "threat", "critical_recall"),
+                "false_alarm": metric(summary, suite, default_setting, model, "threat_track", "critical_false_alarm_rate"),
+            }
+        )
+    if len(raw_rows) <= 1:
+        return None
+    highlighted = {
+        "default_f1": highlight_flags(raw_rows, "default_f1", larger_is_better=True),
+        "short_f1": highlight_flags(raw_rows, "short_f1", larger_is_better=True),
+        "far_f1": highlight_flags(raw_rows, "far_f1", larger_is_better=True),
+        "critical_recall": highlight_flags(raw_rows, "critical_recall", larger_is_better=True),
+    }
+    rows = []
+    for row in raw_rows:
+        model = row["model"]
         rows.append(
             [
-                latex_escape(ABLATION_LABELS.get(model, model)),
-                fmt(metric(summary, suite, default_setting, model, "joint", "composite_f1")),
-                fmt(metric(summary, suite, short_setting, model, "joint", "composite_f1")) if short_setting else "--",
-                fmt(metric(summary, suite, far_setting, model, "joint", "composite_f1")) if far_setting else "--",
-                fmt(metric(summary, suite, default_setting, model, "threat", "critical_recall")),
-                fmt(metric(summary, suite, default_setting, model, "threat_track", "critical_false_alarm_rate")),
+                row["label"],
+                fmt(row["default_f1"], highlight=highlighted["default_f1"].get(model)),
+                fmt(row["short_f1"], highlight=highlighted["short_f1"].get(model)) if row["short_f1"] else "--",
+                fmt(row["far_f1"], highlight=highlighted["far_f1"].get(model)) if row["far_f1"] else "--",
+                fmt(row["critical_recall"], highlight=highlighted["critical_recall"].get(model)),
+                fmt(row["false_alarm"]),
             ]
         )
-    if len(rows) <= 1:
-        return None
     return latex_table(
         caption=(
             "Targeted ablation experiment of Temporal HGTAN. "
@@ -225,14 +280,16 @@ def metric(
     }
 
 
-def fmt(stat: dict[str, float] | None) -> str:
+def fmt(stat: dict[str, float] | None, *, highlight: str | None = None) -> str:
     if stat is None:
         return "--"
     mean = 100.0 * stat["mean"]
     ci95 = 100.0 * stat.get("ci95", 0.0)
     if stat.get("n", 1.0) > 1 and ci95 > 0:
-        return f"{mean:.1f}$\\pm${ci95:.1f}"
-    return f"{mean:.1f}"
+        value = f"{mean:.1f}$\\pm${ci95:.1f}"
+    else:
+        value = f"{mean:.1f}"
+    return apply_highlight(value, highlight)
 
 
 def fmt_number(stat: dict[str, float] | None) -> str:
@@ -243,6 +300,29 @@ def fmt_number(stat: dict[str, float] | None) -> str:
     if stat.get("n", 1.0) > 1 and ci95 > 0:
         return f"{mean:.3f}$\\pm${ci95:.3f}"
     return f"{mean:.3f}"
+
+
+def highlight_flags(rows: list[dict[str, object]], key: str, *, larger_is_better: bool) -> dict[str, str]:
+    scored = [
+        (str(row["model"]), float(stat["mean"]))
+        for row in rows
+        if (stat := row.get(key)) is not None
+    ]
+    scored.sort(key=lambda item: item[1], reverse=larger_is_better)
+    flags: dict[str, str] = {}
+    if scored:
+        flags[scored[0][0]] = "best"
+    if len(scored) > 1:
+        flags[scored[1][0]] = "second"
+    return flags
+
+
+def apply_highlight(value: str, highlight: str | None) -> str:
+    if highlight == "best":
+        return rf"\textbf{{{value}}}"
+    if highlight == "second":
+        return rf"\underline{{{value}}}"
+    return value
 
 
 def latex_escape(value: str) -> str:

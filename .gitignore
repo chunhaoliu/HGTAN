@@ -9,6 +9,7 @@ Thumbs.db
 # Runtime outputs and generated experiment artifacts.
 Outputs/
 ../Outputs/
+codex_runs/
 
 # Local environments and editor state.
 .venv/

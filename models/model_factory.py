@@ -16,10 +16,13 @@ from models.hgtan import (
     TemporalHGTANNoSynergy,
 )
 from models.temporal_baselines import (
+    FlatSequenceMLPBaseline,
     LastFrameMLPBaseline,
     MeanPoolMLPBaseline,
     TemporalGRUBaseline,
     TemporalLSTMBaseline,
+    TemporalTCNBaseline,
+    TemporalTransformerBaseline,
 )
 from models.traditional_baselines import TRADITIONAL_MODEL_NAMES, get_traditional_models
 from utils.config import N_FEATURES
@@ -40,8 +43,11 @@ STANDARD_MODEL_REGISTRY = {
 SEQUENTIAL_MODEL_REGISTRY = {
     "LastFrameMLP": LastFrameMLPBaseline,
     "MeanPoolMLP": MeanPoolMLPBaseline,
+    "FlatSequenceMLP": FlatSequenceMLPBaseline,
     "TemporalGRU": TemporalGRUBaseline,
     "TemporalLSTM": TemporalLSTMBaseline,
+    "TemporalTransformer": TemporalTransformerBaseline,
+    "TemporalTCN": TemporalTCNBaseline,
 }
 
 HGTAN_MODEL_REGISTRY = {

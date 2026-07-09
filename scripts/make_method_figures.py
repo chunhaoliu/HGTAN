@@ -14,6 +14,7 @@ from matplotlib import patches
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = ROOT.parent
+MANUSCRIPT_DIR = PROJECT_ROOT / "IEEE_TAES_Manuscript"
 METHOD_DIR = PROJECT_ROOT / "IEEE_TAES_Manuscript" / "figures" / "method"
 
 COLORS = {
@@ -31,11 +32,9 @@ COLORS = {
 
 
 def main() -> None:
-    METHOD_DIR.mkdir(parents=True, exist_ok=True)
-    # The overall pipeline is a curated manuscript figure (overall_pipeline.pdf).
-    # Do not regenerate the earlier draft pipeline from this helper script.
-    plot_static_temporal(METHOD_DIR / "fig_static_temporal_mechanism.png")
-    plot_hgtan_architecture(METHOD_DIR / "fig_temporal_hgtan_architecture.png")
+    MANUSCRIPT_DIR.mkdir(parents=True, exist_ok=True)
+    plot_pipeline(MANUSCRIPT_DIR / "overall_pipeline_revised.pdf")
+    plot_prior_fusion(MANUSCRIPT_DIR / "innovation1_prior_fusion_revised.pdf")
 
 
 def box(ax, xy, w, h, text, *, fc, ec="#444444", fontsize=8.5, lw=1.25, rounded=True):
@@ -73,48 +72,81 @@ def save(fig, path: Path) -> None:
 
 
 def plot_pipeline(path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(11.4, 4.7))
+    fig, ax = plt.subplots(figsize=(12.4, 4.9))
     ax.set_axis_off()
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.text(0.02, 0.95, "Sequential Multi-Feature UAV Threat-Assessment Pipeline", fontsize=12, weight="bold")
 
     clean_y = 0.66
-    obs_y = 0.27
-    steps_x = [0.04, 0.22, 0.40, 0.58, 0.77]
-    w, h = 0.13, 0.12
+    obs_y = 0.24
+    clean_steps_x = [0.035, 0.205, 0.375, 0.545]
+    obs_steps_x = [0.035, 0.180, 0.325, 0.470, 0.650, 0.805, 0.920]
+    w, h = 0.115, 0.12
 
-    box(ax, (steps_x[0], clean_y), w, h, "Operational\nscenario", fc=COLORS["clean"], ec=COLORS["clean_edge"])
-    box(ax, (steps_x[1], clean_y), w, h, "Clean\ntrajectory", fc=COLORS["clean"], ec=COLORS["clean_edge"])
-    box(ax, (steps_x[2], clean_y), w, h, "Rule-based\nlabel generator", fc=COLORS["clean"], ec=COLORS["clean_edge"])
-    box(ax, (steps_x[3], clean_y), w, h, "Dynamic threat\nand urgency", fc=COLORS["clean"], ec=COLORS["clean_edge"])
+    box(ax, (clean_steps_x[0], clean_y), w, h, "Operational\nscenario", fc=COLORS["clean"], ec=COLORS["clean_edge"])
+    box(ax, (clean_steps_x[1], clean_y), w, h, "Clean\ntrajectory", fc=COLORS["clean"], ec=COLORS["clean_edge"])
+    box(ax, (clean_steps_x[2], clean_y), w, h, "Fixed label\nrules", fc=COLORS["clean"], ec=COLORS["clean_edge"])
+    box(ax, (clean_steps_x[3], clean_y), w, h, "Threat / urgency\nlabels", fc=COLORS["clean"], ec=COLORS["clean_edge"])
     for i in range(3):
-        arrow(ax, (steps_x[i] + w, clean_y + h / 2), (steps_x[i + 1], clean_y + h / 2), color=COLORS["clean_edge"])
+        arrow(ax, (clean_steps_x[i] + w, clean_y + h / 2), (clean_steps_x[i + 1], clean_y + h / 2), color=COLORS["clean_edge"])
 
-    box(ax, (steps_x[0], obs_y), w, h, "Operational\nscenario", fc=COLORS["obs"], ec=COLORS["obs_edge"])
-    box(ax, (steps_x[1], obs_y), w, h, "Range/environment\nsensor degradation", fc=COLORS["obs"], ec=COLORS["obs_edge"])
-    box(ax, (steps_x[2], obs_y), w, h, "Noisy observed\ntrack", fc=COLORS["obs"], ec=COLORS["obs_edge"])
-    box(ax, (steps_x[3], obs_y), w, h, "16 sequential\nindicators", fc=COLORS["obs"], ec=COLORS["obs_edge"])
-    box(ax, (steps_x[4], obs_y), w, h, "Temporal\nHGTAN", fc="#eef0f6", ec="#4d5676")
-    for i in range(4):
-        arrow(ax, (steps_x[i] + w, obs_y + h / 2), (steps_x[i + 1], obs_y + h / 2), color=COLORS["obs_edge"])
+    box(ax, (obs_steps_x[0], obs_y), w, h, "Operational\nscenario", fc=COLORS["obs"], ec=COLORS["obs_edge"])
+    box(ax, (obs_steps_x[1], obs_y), w, h, "Range/environment\nsensor degradation", fc=COLORS["obs"], ec=COLORS["obs_edge"], fontsize=7.8)
+    box(ax, (obs_steps_x[2], obs_y), w, h, "Noisy observed\ntrack", fc=COLORS["obs"], ec=COLORS["obs_edge"])
+    box(ax, (obs_steps_x[3], obs_y), w, h, "Reliability-gated\nprior fusion", fc="#f2efe8", ec="#7a6a3d", fontsize=7.8)
+    box(ax, (obs_steps_x[5], obs_y), w, h, "Adaptive temporal\nevidence fusion", fc="#eef4fb", ec="#4a6f93", fontsize=7.6)
+    box(ax, (obs_steps_x[6], obs_y), 0.070, h, "Threat /\nurgency", fc="#eef0f6", ec="#4d5676", fontsize=7.4)
+    for i in range(3):
+        arrow(ax, (obs_steps_x[i] + w, obs_y + h / 2), (obs_steps_x[i + 1], obs_y + h / 2), color=COLORS["obs_edge"])
 
-    box(ax, (0.91, obs_y), 0.07, h, "Predicted\nthreat/\nurgency", fc="#eef0f6", ec="#4d5676", fontsize=7.5)
-    arrow(ax, (steps_x[4] + w, obs_y + h / 2), (0.91, obs_y + h / 2), color="#4d5676")
-
-    group_y = 0.09
-    group_x = [0.40, 0.515, 0.63, 0.745]
-    group_labels = [("Capability", COLORS["cap"]), ("Intent", COLORS["intent"]), ("Opportunity", COLORS["opp"]), ("Context", COLORS["ctx"])]
+    group_y = 0.095
+    group_x = [0.565, 0.645, 0.725, 0.805]
+    group_labels = [
+        ("Capability", COLORS["cap"]),
+        ("Intent", COLORS["intent"]),
+        ("Opportunity", COLORS["opp"]),
+        ("Context", COLORS["ctx"]),
+    ]
     for x, (label, color) in zip(group_x, group_labels):
-        box(ax, (x, group_y), 0.095, 0.085, label, fc=color, ec="#333333", fontsize=7.8)
-    ax.text(0.40, 0.205, "semantic grouping", fontsize=8, color="#333333")
+        box(ax, (x, group_y), 0.072, 0.080, label, fc=color, ec="#333333", fontsize=6.9)
+    ax.text(0.575, 0.193, "group-specific encoding", fontsize=8, color="#333333")
     for x in group_x:
-        arrow(ax, (steps_x[3] + w / 2, obs_y), (x + 0.047, group_y + 0.085), color="#555555", lw=0.9)
+        arrow(ax, (obs_steps_x[3] + w, obs_y + h / 2), (x + 0.036, group_y + 0.080), color="#555555", lw=0.85)
+        arrow(ax, (x + 0.036, group_y + 0.080), (obs_steps_x[5], obs_y + h / 2), color="#555555", lw=0.85)
+    box(ax, (0.785, 0.49), 0.105, 0.105, "Group-synergy\nreasoning", fc="#f4e9e9", ec="#8c4d4d", fontsize=7.5)
+    arrow(ax, (obs_steps_x[5] + w, obs_y + h / 2), (0.785, 0.535), color="#555555")
+    arrow(ax, (0.890, 0.535), (obs_steps_x[6], obs_y + h / 2), color="#4d5676")
 
     ax.plot([0.03, 0.95], [0.54, 0.54], color="#bbbbbb", lw=0.8, linestyle="--")
     ax.text(0.03, 0.80, "Clean state: used only for labels and event sequence", fontsize=8.5, color=COLORS["clean_edge"])
-    ax.text(0.03, 0.41, "Observed state: decision-model input; target-type feature is masked", fontsize=8.5, color=COLORS["obs_edge"])
-    ax.text(0.055, 0.53, "64 frames, 0.2 s interval; critical event is defined on the clean trajectory", fontsize=8.2)
+    ax.text(0.03, 0.405, "Observed state: decision-model input; target-type feature is masked", fontsize=8.5, color=COLORS["obs_edge"])
+    ax.text(0.055, 0.53, "64 frames, 0.2 s interval; prior fusion occurs before group-specific encoding", fontsize=8.2)
+    save(fig, path)
+
+
+def plot_prior_fusion(path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(6.2, 3.8))
+    ax.set_axis_off()
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.text(0.03, 0.93, "Reliability-Gated Prior Fusion", fontsize=11.5, weight="bold")
+
+    box(ax, (0.05, 0.58), 0.18, 0.16, "Noisy observed\nindicator $x_{t,f}$", fc="#fbe3cf", ec="#a75f23")
+    box(ax, (0.05, 0.24), 0.18, 0.16, "Expert prior\nweight $\\bar{w}_f$", fc="#f2efe8", ec="#7a6a3d")
+    box(ax, (0.33, 0.50), 0.18, 0.20, "Reliability gate\n$\\lambda_{t,f}$", fc="#eef4fb", ec="#4a6f93")
+    box(ax, (0.33, 0.18), 0.18, 0.18, "Weighted prior\nform $\\bar{w}_f x_{t,f}$", fc="#f7f1de", ec="#7a6a3d", fontsize=8.1)
+    box(ax, (0.61, 0.37), 0.19, 0.19, "Residual prior\ncorrection", fc="#e7f0e9", ec="#4c7a57")
+    box(ax, (0.86, 0.39), 0.11, 0.15, "Corrected\nfeature\n$\\tilde{x}_{t,f}$", fc="#f6f6f6", ec="#444444", fontsize=7.8)
+
+    arrow(ax, (0.23, 0.66), (0.33, 0.60), color="#a75f23")
+    arrow(ax, (0.23, 0.32), (0.33, 0.27), color="#7a6a3d")
+    arrow(ax, (0.51, 0.60), (0.61, 0.50), color="#4a6f93")
+    arrow(ax, (0.51, 0.27), (0.61, 0.43), color="#7a6a3d")
+    arrow(ax, (0.80, 0.47), (0.86, 0.465), color="#4c7a57")
+
+    ax.text(0.61, 0.21, r"$\tilde{x}_{t,f}=x_{t,f}+\rho_f\lambda_{t,f}(\bar{w}_fx_{t,f}-x_{t,f})$", fontsize=9.3)
+    ax.text(0.06, 0.08, "The prior is a gated residual correction, not a hard feature reweighting.", fontsize=8.3, color="#333333")
     save(fig, path)
 
 
