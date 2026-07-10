@@ -31,7 +31,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from data.generator import THREAT_THRESHOLDS
 from data.sequence_generator import generate_uav_track_sequences
 from models.traditional_baselines import get_traditional_models
 from scripts.paper_assets import DEFAULT_PAPER_TAG, selected_figure_stems
@@ -272,6 +271,7 @@ def build_assessment_protocol_context() -> dict[str, object]:
         "track_missing_ratio": 0.05,
         "track_jitter_std": 0.010,
         "type_as_input": False,
+        "mission_as_input": False,
     }
     _, threat_seq, _, metadata = generate_uav_track_sequences(
         n_tracks=900,
@@ -319,10 +319,6 @@ def draw_indicator_quantification_panel(ax: plt.Axes, *, x: np.ndarray) -> None:
     ax.plot(x, x, color="#4d7fa8", linewidth=2.3, label=r"Positive $q_f^+(x)$")
     ax.plot(x, 1.0 - x, color="#b45f4d", linewidth=2.3, label=r"Negative $q_f^-(x)$")
     ax.plot(x, np.power(1.0 - x, 1.25), color="#6d9276", linewidth=2.0, linestyle="--", label="Low-altitude / low-confidence emphasis")
-    for level, threshold in enumerate(THREAT_THRESHOLDS, start=2):
-        ax.axhline(threshold, color="#777777", linewidth=0.8, linestyle=":")
-        ax.text(0.985, threshold + 0.01, f"L{level}", ha="right", va="bottom", fontsize=7, color="#555555")
-    ax.axhspan(float(THREAT_THRESHOLDS[-1]), 1.0, color="#b45f4d", alpha=0.08)
     ax.set_xlabel("Normalized observation")
     ax.set_ylabel("Risk-oriented value")
     ax.set_xlim(0, 1)
