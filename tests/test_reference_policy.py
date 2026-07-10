@@ -3,6 +3,7 @@ import numpy as np
 from data.reference_policy import REFERENCE_POLICY_NAME, build_reference_assessment_sequences
 from data.sequence_generator import generate_uav_track_payload
 from data.pipeline_common import build_split_indices
+from exp.result_writer import setting_context
 
 
 def _metadata() -> dict[str, np.ndarray]:
@@ -76,3 +77,22 @@ def test_fixed_scenario_holdout_excludes_the_named_family_from_training():
     assert np.all(families[test_idx] == "Saturation_Overload")
     assert not np.any(families[train_idx] == "Saturation_Overload")
     assert not np.any(families[val_idx] == "Saturation_Overload")
+
+
+def test_result_context_records_the_named_scenario_holdout():
+    setting = {
+        "dataset": "ATUAV-Core",
+        "protocol": "latent_state_masked",
+        "scenario_profile": "ATUAV-Core",
+        "split_strategy": "fixed_holdout",
+        "detection_window": "standard",
+        "noise_level": 0.0,
+        "missing_ratio": 0.0,
+        "scenario_holdout_key": "scenario_family",
+        "scenario_holdout_value": "EW_Contested",
+    }
+
+    context = setting_context("holdout_ew", setting)
+
+    assert context["scenario_holdout_key"] == "scenario_family"
+    assert context["scenario_holdout_value"] == "EW_Contested"
