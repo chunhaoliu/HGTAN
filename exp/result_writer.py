@@ -53,6 +53,7 @@ def build_run_metric_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]
             "protocol": setting.get("protocol"),
             "scenario_profile": setting.get("scenario_profile"),
             "task_form": setting.get("task_form", "instantaneous"),
+            "reference_policy_variant": setting.get("reference_policy_variant"),
             "scenario_holdout_key": setting.get("scenario_holdout_key"),
             "scenario_holdout_value": setting.get("scenario_holdout_value"),
             "run_index": record.get("run_index"),
@@ -170,6 +171,10 @@ def _flatten_track_metric_row(common: dict[str, Any], track_row: dict[str, Any])
         "protocol": track_row.get("protocol", common.get("protocol")),
         "scenario_profile": track_row.get("scenario_profile", common.get("scenario_profile")),
         "task_form": track_row.get("task_form", common.get("task_form")),
+        "reference_policy_variant": track_row.get(
+            "reference_policy_variant",
+            common.get("reference_policy_variant"),
+        ),
         "scenario_holdout_key": track_row.get("scenario_holdout_key", common.get("scenario_holdout_key")),
         "scenario_holdout_value": track_row.get("scenario_holdout_value", common.get("scenario_holdout_value")),
         "run_index": track_row.get("run_index", common.get("run_index")),
