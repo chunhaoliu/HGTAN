@@ -1,9 +1,9 @@
 import numpy as np
-
 from data.reference_policy import REFERENCE_POLICY_NAME, build_reference_assessment_sequences
 from data.sequence_generator import generate_uav_track_payload
 from data.pipeline_common import build_split_indices
-from exp.result_writer import build_training_rows, setting_context
+from exp.exp_main import load_seed_checkpoint
+from exp.result_writer import build_training_rows, setting_context, write_json_gzip
 
 
 def _metadata() -> dict[str, np.ndarray]:
@@ -128,3 +128,31 @@ def test_training_export_keeps_validation_selection_and_holdout_identity():
     assert summaries[0]["overfitting_gap"] == 0.04
     assert summaries[0]["scenario_holdout_value"] == "Strike_Penetration"
     assert curves[0]["val_score"] == 0.55
+
+
+def test_seed_checkpoint_round_trip_requires_matching_identity(tmp_path):
+    path = tmp_path / "run_00_seed_42.json.gz"
+    record = {"run_index": 0, "seed": 42, "results": {"TemporalHGTAN": {"threat": {"f1": 0.8}}}}
+    write_json_gzip(path, record)
+
+    loaded = load_seed_checkpoint(
+        path,
+        expected_models=["TemporalHGTAN"],
+        expected_seed=42,
+        expected_run_index=0,
+    )
+
+    assert loaded == record
+    assert load_seed_checkpoint(path, expected_models=["TemporalLSTM"], expected_seed=42, expected_run_index=0) is None
+
+
+def test_seed_checkpoint_ignores_truncated_json(tmp_path):
+    path = tmp_path / "run_00_seed_42.json.gz"
+    path.write_bytes(b"not-a-gzip-stream")
+
+    assert load_seed_checkpoint(
+        path,
+        expected_models=["TemporalHGTAN"],
+        expected_seed=42,
+        expected_run_index=0,
+    ) is None

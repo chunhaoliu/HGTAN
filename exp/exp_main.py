@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,7 +22,7 @@ from data import (
     sequence_data_provider,
 )
 from exp.registry import apply_assessment_setting, make_setting_name
-from exp.result_writer import setting_context, write_json, write_setting_outputs
+from exp.result_writer import read_json_gzip, setting_context, write_json, write_json_gzip, write_setting_outputs
 from models.model_factory import (
     SEQUENTIAL_MODELS,
     build_model,
@@ -175,9 +176,25 @@ class Exp_Main:
 
         seed_runner = run_sequence_single_seed if is_sequential_setting(setting) else run_single_seed
         records = []
+        checkpoint_dir = setting_dir / "seed_checkpoints"
         for run_idx, seed in enumerate(seeds):
             print(f"  Run {run_idx + 1}/{len(seeds)} | seed={seed}")
-            records.append(seed_runner(setting, config, self.options.models, seed, run_idx, setting_name))
+            checkpoint_path = checkpoint_dir / f"run_{run_idx:02d}_seed_{seed}.json.gz"
+            checkpoint = load_seed_checkpoint(
+                checkpoint_path,
+                expected_models=self.options.models,
+                expected_seed=seed,
+                expected_run_index=run_idx,
+            ) if self.options.skip_existing else None
+            if checkpoint is not None:
+                print(f"    Reused completed seed checkpoint: {checkpoint_path.name}")
+                records.append(checkpoint)
+                continue
+
+            record = seed_runner(setting, config, self.options.models, seed, run_idx, setting_name)
+            records.append(record)
+            write_json_gzip(checkpoint_path, record)
+            print(f"    Checkpointed completed seed: {checkpoint_path.name}")
 
         summary_rows = annotate_summary_rows(summarize_results(records), setting_name, setting)
         write_setting_outputs(
@@ -1350,6 +1367,27 @@ def _to_finite_float(value: Any) -> float | None:
 def validate_models(model_names: list[str]) -> list[str]:
     """Backward-compatible wrapper used by run.py."""
     return validate_model_names(model_names)
+
+
+def load_seed_checkpoint(
+    path: Path,
+    *,
+    expected_models: list[str],
+    expected_seed: int,
+    expected_run_index: int,
+) -> dict[str, Any] | None:
+    """Return a complete matching seed checkpoint, otherwise rerun that seed."""
+    if not path.exists():
+        return None
+    try:
+        record = read_json_gzip(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if record.get("seed") != expected_seed or record.get("run_index") != expected_run_index:
+        return None
+    if not set(expected_models).issubset(record.get("results", {})):
+        return None
+    return record
 
 
 def release_runtime_cache() -> None:

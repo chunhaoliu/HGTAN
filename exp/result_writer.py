@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import gzip
 import re
 from argparse import Namespace
 from pathlib import Path
@@ -281,6 +282,19 @@ def write_json(path: Path, payload: Any) -> None:
     """Write JSON with numpy-safe conversion."""
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(to_serializable(payload), handle, ensure_ascii=False, indent=2)
+
+
+def write_json_gzip(path: Path, payload: Any) -> None:
+    """Write a compressed JSON checkpoint for one completed seeded run."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump(to_serializable(payload), handle, ensure_ascii=False, separators=(",", ":"))
+
+
+def read_json_gzip(path: Path) -> Any:
+    """Read one compressed JSON checkpoint written by this experiment runner."""
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def _safe_key(value: str) -> str:
