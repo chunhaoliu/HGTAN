@@ -3,7 +3,7 @@ import numpy as np
 from data.reference_policy import REFERENCE_POLICY_NAME, build_reference_assessment_sequences
 from data.sequence_generator import generate_uav_track_payload
 from data.pipeline_common import build_split_indices
-from exp.result_writer import setting_context
+from exp.result_writer import build_training_rows, setting_context
 
 
 def _metadata() -> dict[str, np.ndarray]:
@@ -96,3 +96,35 @@ def test_result_context_records_the_named_scenario_holdout():
 
     assert context["scenario_holdout_key"] == "scenario_family"
     assert context["scenario_holdout_value"] == "EW_Contested"
+
+
+def test_training_export_keeps_validation_selection_and_holdout_identity():
+    records = [
+        {
+            "assessment_setting": {
+                "dataset": "ATUAV-Core",
+                "protocol": "latent_state_masked",
+                "scenario_profile": "ATUAV-Core",
+                "task_form": "sequential",
+                "split_strategy": "fixed_holdout",
+                "reference_policy_variant": "balanced",
+                "scenario_holdout_key": "scenario_family",
+                "scenario_holdout_value": "Strike_Penetration",
+            },
+            "run_index": 0,
+            "seed": 42,
+            "training": {
+                "TemporalHGTAN": {
+                    "info": {"best_epoch": 7, "best_val_score": 0.81, "overfitting": {"gap": 0.04}},
+                    "curves": [{"epoch": 1, "train_loss": 1.2, "val_score": 0.55}],
+                }
+            },
+        }
+    ]
+
+    summaries, curves = build_training_rows(records)
+
+    assert summaries[0]["best_val_score"] == 0.81
+    assert summaries[0]["overfitting_gap"] == 0.04
+    assert summaries[0]["scenario_holdout_value"] == "Strike_Penetration"
+    assert curves[0]["val_score"] == 0.55

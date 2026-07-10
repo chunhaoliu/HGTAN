@@ -443,6 +443,14 @@ def build_assessment_setting_record(setting: dict[str, Any]) -> dict[str, Any]:
     }
     if is_sequential_setting(setting):
         record["task_form"] = SEQUENTIAL_TASK_FORM
+    for key in [
+        "split_strategy",
+        "reference_policy_variant",
+        "scenario_holdout_key",
+        "scenario_holdout_value",
+    ]:
+        if key in setting:
+            record[key] = setting[key]
     return record
 
 

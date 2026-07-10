@@ -33,6 +33,11 @@ def write_setting_outputs(
     run_metric_rows = build_run_metric_rows(records)
     if run_metric_rows:
         pd.DataFrame(run_metric_rows).to_csv(setting_dir / "run_metrics.csv", index=False)
+    training_summary_rows, training_curve_rows = build_training_rows(records)
+    if training_summary_rows:
+        pd.DataFrame(training_summary_rows).to_csv(setting_dir / "training_summary.csv", index=False)
+    if training_curve_rows:
+        pd.DataFrame(training_curve_rows).to_csv(setting_dir / "training_curves.csv", index=False)
     write_operational_cases_npz(setting_dir / "operational_cases.npz", records)
 
 
@@ -59,6 +64,39 @@ def build_run_metric_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]
         for track_row in record.get("track_metrics", []):
             rows.extend(_flatten_track_metric_row(common, track_row))
     return rows
+
+
+def build_training_rows(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Flatten validation-selected training metadata and epoch curves."""
+    summaries: list[dict[str, Any]] = []
+    curves: list[dict[str, Any]] = []
+    for record in records:
+        setting = record.get("assessment_setting", {})
+        common = {
+            "setting": _record_setting_name(record),
+            "dataset": setting.get("dataset"),
+            "protocol": setting.get("protocol"),
+            "scenario_profile": setting.get("scenario_profile"),
+            "task_form": setting.get("task_form", "instantaneous"),
+            "split_strategy": setting.get("split_strategy"),
+            "reference_policy_variant": setting.get("reference_policy_variant"),
+            "scenario_holdout_key": setting.get("scenario_holdout_key"),
+            "scenario_holdout_value": setting.get("scenario_holdout_value"),
+            "run_index": record.get("run_index"),
+            "seed": record.get("seed"),
+        }
+        for model_name, training in record.get("training", {}).items():
+            summary = {**common, "model": model_name}
+            for key, value in training.get("info", {}).items():
+                if isinstance(value, dict):
+                    for nested_key, nested_value in value.items():
+                        summary[f"{key}_{nested_key}"] = nested_value
+                else:
+                    summary[key] = value
+            summaries.append(summary)
+            for curve in training.get("curves", []):
+                curves.append({**common, "model": model_name, **curve})
+    return summaries, curves
 
 
 def _record_setting_name(record: dict[str, Any]) -> str | None:
