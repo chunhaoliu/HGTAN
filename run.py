@@ -29,6 +29,7 @@ SETTING_OVERRIDE_KEYS = (
     "track_jitter_std",
     "type_as_input",
     "mission_as_input",
+    "reference_policy_variant",
 )
 
 
@@ -108,6 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     sequence.add_argument("--track_jitter_std", type=float, default=None)
     add_toggle_flag(sequence, name="type_as_input", dest="type_as_input", help_text="Append target-type hints to sequential model inputs.")
     add_toggle_flag(sequence, name="mission_as_input", dest="mission_as_input", help_text="Append latent mission codes to sequential model inputs.")
+    sequence.add_argument("--reference_policy_variant", default=None, choices=["balanced", "consequence_first", "access_first"])
     return parser
 
 

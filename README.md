@@ -5,6 +5,8 @@ This project focuses on sequential multi-feature threat assessment for air-targe
 - `comparison`: baseline comparison on the default sequential threat-assessment protocol.
 - `ablation`: TemporalHGTAN ablation under one default setting plus two matched stress settings.
 - `observed_time` and `distance_degradation`: focused sensitivity axes that support the comparison experiment.
+- `policy_robustness`: pre-specified reference-policy variants used to test whether model ranking depends on one frozen policy.
+- `scenario_holdout`: leave-one-scenario-family-out evaluation across Probe-Surveillance, EW-Contested, Strike-Penetration, and Saturation-Overload.
 
 Everything else has been pushed out of the formal path or removed.
 

@@ -20,6 +20,7 @@ def generate_uav_track_payload(
     benchmark_dataset: str | None = None,
     type_as_input: bool | None = None,
     mission_as_input: bool | None = None,
+    reference_policy_variant: str | None = None,
     sequence_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate one assessment payload for sequential ATUAV track data."""
@@ -29,6 +30,7 @@ def generate_uav_track_payload(
     seq_len = seq_len or sequence_cfg["seq_len"]
     type_as_input = sequence_cfg["type_as_input"] if type_as_input is None else type_as_input
     mission_as_input = sequence_cfg["mission_as_input"] if mission_as_input is None else mission_as_input
+    reference_policy_variant = sequence_cfg["reference_policy_variant"] if reference_policy_variant is None else reference_policy_variant
 
     rng = np.random.default_rng(seed)
     sample_payload = generate_uav_swarm_payload(
@@ -48,7 +50,11 @@ def generate_uav_track_payload(
 
     clean_sequences = _build_temporal_features(final_features, metadata, seq_len, rng)
     observed_sequences = _apply_sequence_noise(clean_sequences, metadata, rng, sequence_cfg)
-    threat_seq, urgency_seq, reference_components = build_reference_assessment_sequences(clean_sequences, metadata)
+    threat_seq, urgency_seq, reference_components = build_reference_assessment_sequences(
+        clean_sequences,
+        metadata,
+        variant=reference_policy_variant,
+    )
 
     model_sequences = observed_sequences.copy()
     if not type_as_input:
@@ -62,6 +68,7 @@ def generate_uav_track_payload(
         seq_len,
         type_as_input,
         mission_as_input,
+        reference_policy_variant,
         sequence_cfg,
     )
     track_metadata["clean_sequence"] = clean_sequences.astype(np.float32)
@@ -89,9 +96,10 @@ def generate_uav_track_sequences(
     benchmark_dataset: str | None = None,
     type_as_input: bool | None = None,
     mission_as_input: bool | None = None,
+    reference_policy_variant: str | None = None,
     sequence_cfg: dict[str, Any] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    """Generate synthetic UAV track sequences with dynamic threat labels.
+    """Generate simulated UAV track sequences with dynamic threat labels.
 
     The generator reuses the static scenario semantics, then creates a plausible
     temporal evolution from a safer early observation to a later risk state.
@@ -105,6 +113,7 @@ def generate_uav_track_sequences(
         benchmark_dataset=benchmark_dataset,
         type_as_input=type_as_input,
         mission_as_input=mission_as_input,
+        reference_policy_variant=reference_policy_variant,
         sequence_cfg=sequence_cfg,
     )
     return payload["sequences"], payload["threat_seq"], payload["urgency_seq"], payload["metadata"]
@@ -218,6 +227,7 @@ def _build_track_metadata(
     seq_len: int,
     type_as_input: bool,
     mission_as_input: bool,
+    reference_policy_variant: str,
     sequence_cfg: dict[str, Any],
 ) -> dict[str, Any]:
     track_metadata = dict(metadata)
@@ -226,6 +236,7 @@ def _build_track_metadata(
     track_metadata["seq_len"] = np.full(n_tracks, seq_len)
     track_metadata["type_as_input"] = np.full(n_tracks, type_as_input)
     track_metadata["mission_as_input"] = np.full(n_tracks, mission_as_input)
+    track_metadata["reference_policy_variant"] = np.full(n_tracks, reference_policy_variant, dtype=object)
     track_metadata["range_m"] = np.full(n_tracks, sequence_cfg.get("range_m", 1000))
     track_metadata["track_noise_std"] = np.full(n_tracks, sequence_cfg.get("track_noise_std", 0.015))
     track_metadata["track_missing_ratio"] = np.full(n_tracks, sequence_cfg.get("track_missing_ratio", 0.0))

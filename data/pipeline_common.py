@@ -38,6 +38,16 @@ def build_split_indices(
         if indices is not None:
             return indices
 
+    if split_strategy == "fixed_holdout":
+        return _fixed_group_holdout_split(
+            threat_labels=threat_labels,
+            urgency_labels=urgency_labels,
+            metadata=metadata,
+            seed=seed,
+            data_cfg=data_cfg,
+            validator=validator,
+        )
+
     return stratified_split_indices(threat_labels, seed, data_cfg)
 
 
@@ -157,3 +167,39 @@ def _scenario_holdout_split(
             return train_idx, val_idx, test_idx
 
     return None
+
+
+def _fixed_group_holdout_split(
+    *,
+    threat_labels: np.ndarray,
+    urgency_labels: np.ndarray,
+    metadata: dict[str, object],
+    seed: int,
+    data_cfg: dict[str, object],
+    validator: SplitValidator,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Hold out one named scenario family and stratify validation in the remainder."""
+    group_key = str(data_cfg.get("scenario_holdout_key", "scenario_family"))
+    heldout_value = data_cfg.get("scenario_holdout_value")
+    if heldout_value is None:
+        raise ValueError("fixed_holdout requires scenario_holdout_value")
+    if group_key not in metadata:
+        valid = ", ".join(sorted(metadata.keys()))
+        raise KeyError(f"Unknown scenario_holdout_key={group_key!r}. Valid metadata keys: {valid}")
+
+    groups = np.asarray(metadata[group_key]).astype(str)
+    test_idx = np.flatnonzero(groups == str(heldout_value))
+    remainder = np.flatnonzero(groups != str(heldout_value))
+    if len(test_idx) == 0 or len(remainder) < 2:
+        raise ValueError(f"Cannot hold out {heldout_value!r} from {group_key!r}")
+
+    val_fraction = float(data_cfg["val_ratio"]) / (float(data_cfg["train_ratio"]) + float(data_cfg["val_ratio"]))
+    train_idx, val_idx = train_test_split(
+        remainder,
+        test_size=val_fraction,
+        random_state=seed,
+        stratify=safe_stratify_labels(threat_labels[remainder]),
+    )
+    if not validator(threat_labels, urgency_labels, train_idx, val_idx, test_idx):
+        raise ValueError(f"Fixed holdout {heldout_value!r} does not satisfy the split validator")
+    return train_idx, val_idx, test_idx

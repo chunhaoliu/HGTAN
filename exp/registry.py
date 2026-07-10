@@ -25,9 +25,10 @@ SUITE_SEQUENCE_KEYS = [
     "track_jitter_std",
     "type_as_input",
     "mission_as_input",
+    "reference_policy_variant",
 ]
 
-DATA_CONFIG_KEYS: list[str] = []
+DATA_CONFIG_KEYS = ["scenario_holdout_key", "scenario_holdout_value"]
 SEQUENCE_CONFIG_KEYS = [
     "seq_len",
     "observed_len",
@@ -38,6 +39,7 @@ SEQUENCE_CONFIG_KEYS = [
     "track_jitter_std",
     "type_as_input",
     "mission_as_input",
+    "reference_policy_variant",
 ]
 
 
@@ -198,6 +200,39 @@ def _distance_degradation_settings() -> list[dict[str, Any]]:
     return settings
 
 
+def _policy_robustness_settings() -> list[dict[str, Any]]:
+    dataset_id = "ATUAV-Core"
+    protocol_id = "latent_state_masked"
+    return [
+        _sequential_setting(
+            dataset_id,
+            protocol_id,
+            setting_name=f"ATUAV-Core__latent_state_masked__policy_{variant}",
+            description=f"Reference-policy robustness under the {variant} policy variant.",
+            reference_policy_variant=variant,
+        )
+        for variant in ["balanced", "consequence_first", "access_first"]
+    ]
+
+
+def _scenario_holdout_settings() -> list[dict[str, Any]]:
+    dataset_id = "ATUAV-Core"
+    protocol_id = "latent_state_masked"
+    families = ["Probe_Surveillance", "EW_Contested", "Strike_Penetration", "Saturation_Overload"]
+    return [
+        _sequential_setting(
+            dataset_id,
+            protocol_id,
+            setting_name=f"ATUAV-Core__latent_state_masked__holdout_{family}",
+            description=f"Leave-{family}-out scenario-family generalization setting.",
+            split_strategy="fixed_holdout",
+            scenario_holdout_key="scenario_family",
+            scenario_holdout_value=family,
+        )
+        for family in families
+    ]
+
+
 ASSESSMENT_DATASETS: dict[str, dict[str, Any]] = {
     "ATUAV-Core": _dataset_entry(
         "ATUAV-Core",
@@ -216,6 +251,7 @@ ASSESSMENT_PROTOCOLS: dict[str, dict[str, Any]] = {
         frame_interval=0.2,
         type_as_input=False,
         mission_as_input=False,
+        reference_policy_variant="balanced",
     ),
 }
 
@@ -265,6 +301,22 @@ ASSESSMENT_SUITES: dict[str, dict[str, Any]] = {
         default_n_samples=4000,
         task_form=SEQUENTIAL_TASK_FORM,
         settings=_distance_degradation_settings(),
+    ),
+    "policy_robustness": _suite_entry(
+        "Reference-policy robustness across pre-specified operational policy variants.",
+        datasets=["ATUAV-Core"],
+        protocols=["latent_state_masked"],
+        default_n_samples=4000,
+        task_form=SEQUENTIAL_TASK_FORM,
+        settings=_policy_robustness_settings(),
+    ),
+    "scenario_holdout": _suite_entry(
+        "Leave-one-scenario-family-out generalization across the four operational families.",
+        datasets=["ATUAV-Core"],
+        protocols=["latent_state_masked"],
+        default_n_samples=4000,
+        task_form=SEQUENTIAL_TASK_FORM,
+        settings=_scenario_holdout_settings(),
     ),
 }
 

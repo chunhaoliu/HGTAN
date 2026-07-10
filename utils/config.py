@@ -340,6 +340,7 @@ class HGTANConfig:
         "sensor_profile": "ATUAV-Core",
         "type_as_input": False,
         "mission_as_input": False,
+        "reference_policy_variant": "balanced",
     }
 
     MODEL = {

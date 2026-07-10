@@ -113,6 +113,7 @@ def _flatten_track_metric_row(common: dict[str, Any], track_row: dict[str, Any])
         "track_jitter_std",
         "type_as_input",
         "mission_as_input",
+        "reference_policy_variant",
         "run_index",
         "seed",
         "model",
@@ -223,6 +224,7 @@ def setting_context(setting_name: str, setting: dict[str, Any]) -> dict[str, Any
         "sensor_profile",
         "type_as_input",
         "mission_as_input",
+        "reference_policy_variant",
     ]:
         if key in setting:
             context[key] = setting[key]

@@ -16,14 +16,30 @@ import numpy as np
 REFERENCE_POLICY_NAME = "latent_consequence_v1"
 REFERENCE_THREAT_THRESHOLDS = np.array([0.24, 0.41, 0.58, 0.74], dtype=np.float64)
 REFERENCE_URGENCY_THRESHOLDS = np.array([0.32, 0.62], dtype=np.float64)
+REFERENCE_POLICY_VARIANTS = {
+    "balanced": {
+        "threat": (0.42, 0.24, 0.22, 0.12, 0.10),
+        "urgency": (0.56, 0.24, 0.12, 0.08),
+    },
+    "consequence_first": {
+        "threat": (0.46, 0.28, 0.16, 0.10, 0.08),
+        "urgency": (0.50, 0.28, 0.14, 0.08),
+    },
+    "access_first": {
+        "threat": (0.36, 0.20, 0.32, 0.12, 0.10),
+        "urgency": (0.62, 0.18, 0.12, 0.08),
+    },
+}
 
 
 def build_reference_assessment_sequences(
     clean_sequences: np.ndarray,
     metadata: dict[str, Any],
+    *,
+    variant: str = "balanced",
 ) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
     """Return frozen threat and urgency references for clean scenario states."""
-    components = reference_assessment_components(clean_sequences, metadata)
+    components = reference_assessment_components(clean_sequences, metadata, variant=variant)
     threat = np.clip(np.digitize(components["threat_score"], REFERENCE_THREAT_THRESHOLDS) + 1, 1, 5)
     urgency = np.clip(np.digitize(components["urgency_score"], REFERENCE_URGENCY_THRESHOLDS) + 1, 1, 3)
     return threat.astype(np.int64), urgency.astype(np.int64), components
@@ -32,6 +48,8 @@ def build_reference_assessment_sequences(
 def reference_assessment_components(
     clean_sequences: np.ndarray,
     metadata: dict[str, Any],
+    *,
+    variant: str = "balanced",
 ) -> dict[str, np.ndarray]:
     """Compute interpretable clean-state consequence and response components.
 
@@ -42,6 +60,9 @@ def reference_assessment_components(
     """
     if clean_sequences.ndim != 3 or clean_sequences.shape[-1] != 16:
         raise ValueError("clean_sequences must have shape (n_tracks, n_steps, 16)")
+    if variant not in REFERENCE_POLICY_VARIANTS:
+        valid = ", ".join(sorted(REFERENCE_POLICY_VARIANTS))
+        raise ValueError(f"Unknown reference policy variant {variant!r}. Valid variants: {valid}")
 
     n_tracks, n_steps, _ = clean_sequences.shape
     for key in ("mission_type", "target_type", "formation_type", "defense_state", "environment_type", "asset_type"):
@@ -109,20 +130,22 @@ def reference_assessment_components(
         0.0,
         1.0,
     )
+    threat_consequence, threat_platform, threat_access, threat_defense, threat_interaction = REFERENCE_POLICY_VARIANTS[variant]["threat"]
+    urgency_access, urgency_defense, urgency_interaction, urgency_formation = REFERENCE_POLICY_VARIANTS[variant]["urgency"]
     threat_score = np.clip(
-        0.42 * consequence
-        + 0.24 * platform_consequence
-        + 0.22 * approach
-        + 0.12 * defense_margin
-        + 0.10 * mission_commitment * approach,
+        threat_consequence * consequence
+        + threat_platform * platform_consequence
+        + threat_access * approach
+        + threat_defense * defense_margin
+        + threat_interaction * mission_commitment * approach,
         0.0,
         1.0,
     )
     urgency_score = np.clip(
-        0.56 * approach
-        + 0.24 * defense_margin
-        + 0.12 * mission_commitment * approach
-        + 0.08 * formation,
+        urgency_access * approach
+        + urgency_defense * defense_margin
+        + urgency_interaction * mission_commitment * approach
+        + urgency_formation * formation,
         0.0,
         1.0,
     )
@@ -136,4 +159,5 @@ def reference_assessment_components(
         "consequence": np.broadcast_to(consequence, expected_shape).copy(),
         "threat_score": threat_score,
         "urgency_score": urgency_score,
+        "reference_policy_variant": np.full(expected_shape, variant, dtype=object),
     }
