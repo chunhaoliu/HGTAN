@@ -15,6 +15,12 @@ from models.hgtan import (
     TemporalHGTANNoPrior,
     TemporalHGTANNoSynergy,
 )
+from models.hgtan_v2 import (
+    TemporalHGTANV2,
+    TemporalHGTANV2NoReliability,
+    TemporalHGTANV2NoSynergy,
+    TemporalHGTANV2NoTemporal,
+)
 from models.temporal_baselines import (
     FlatSequenceMLPBaseline,
     LastFrameMLPBaseline,
@@ -57,6 +63,10 @@ HGTAN_MODEL_REGISTRY = {
     "TemporalHGTAN_MeanPool": TemporalHGTANMeanPool,
     "TemporalHGTAN_NoPrior": TemporalHGTANNoPrior,
     "TemporalHGTAN_NoSynergy": TemporalHGTANNoSynergy,
+    "TemporalHGTANV2": TemporalHGTANV2,
+    "TemporalHGTANV2_NoReliability": TemporalHGTANV2NoReliability,
+    "TemporalHGTANV2_NoTemporal": TemporalHGTANV2NoTemporal,
+    "TemporalHGTANV2_NoSynergy": TemporalHGTANV2NoSynergy,
 }
 
 SEQUENTIAL_MODELS = frozenset(SEQUENTIAL_MODEL_REGISTRY) | frozenset(

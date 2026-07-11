@@ -29,7 +29,28 @@ REFERENCE_POLICY_VARIANTS = {
         "threat": (0.36, 0.20, 0.32, 0.12, 0.10),
         "urgency": (0.62, 0.18, 0.12, 0.08),
     },
+    "temporal_balanced": {
+        "threat": (0.42, 0.24, 0.22, 0.12, 0.10),
+        "urgency": (0.56, 0.24, 0.12, 0.08),
+    },
 }
+
+
+def _causal_ema(values: np.ndarray, alpha: float) -> np.ndarray:
+    smoothed = np.empty_like(values, dtype=np.float64)
+    smoothed[:, 0] = values[:, 0]
+    for step in range(1, values.shape[1]):
+        smoothed[:, step] = alpha * values[:, step] + (1.0 - alpha) * smoothed[:, step - 1]
+    return smoothed
+
+
+def _causal_closing_signal(values: np.ndarray, lag: int = 5, scale: float = 0.02) -> np.ndarray:
+    signal = np.zeros_like(values, dtype=np.float64)
+    for step in range(1, values.shape[1]):
+        start = max(step - lag, 0)
+        elapsed = max(step - start, 1)
+        signal[:, step] = (values[:, start] - values[:, step]) / (scale * elapsed)
+    return np.clip(signal, 0.0, 1.0)
 
 
 def build_reference_assessment_sequences(
@@ -150,6 +171,44 @@ def reference_assessment_components(
         1.0,
     )
 
+    temporal_persistence = approach.copy()
+    temporal_escalation = np.zeros_like(approach)
+    if variant == "temporal_balanced":
+        approach_persistence = _causal_ema(approach, alpha=0.22)
+        intent_persistence = _causal_ema(mission_commitment * approach, alpha=0.18)
+        distance_closing = _causal_closing_signal(distance)
+        arrival_closing = _causal_closing_signal(time_to_arrival)
+        heading_commitment = _causal_ema(1.0 - heading, alpha=0.25)
+        temporal_persistence = np.clip(
+            0.50 * approach_persistence
+            + 0.25 * intent_persistence
+            + 0.15 * heading_commitment
+            + 0.10 * coordination,
+            0.0,
+            1.0,
+        )
+        temporal_escalation = np.clip(
+            0.55 * distance_closing + 0.35 * arrival_closing + 0.10 * route_deviation,
+            0.0,
+            1.0,
+        )
+        # History contributes through fixed physical persistence and closing
+        # terms rather than through observed inputs or model-specific states.
+        threat_score = np.clip(
+            threat_score
+            + 0.20 * (temporal_persistence - approach)
+            + 0.15 * (temporal_escalation - 0.15),
+            0.0,
+            1.0,
+        )
+        urgency_score = np.clip(
+            urgency_score
+            + 0.16 * (temporal_persistence - approach)
+            + 0.18 * (temporal_escalation - 0.19),
+            0.0,
+            1.0,
+        )
+
     expected_shape = (n_tracks, n_steps)
     return {
         "approach": np.broadcast_to(approach, expected_shape).copy(),
@@ -157,6 +216,8 @@ def reference_assessment_components(
         "mission_commitment": np.broadcast_to(mission_commitment, expected_shape).copy(),
         "defense_margin": np.broadcast_to(defense_margin, expected_shape).copy(),
         "consequence": np.broadcast_to(consequence, expected_shape).copy(),
+        "temporal_persistence": np.broadcast_to(temporal_persistence, expected_shape).copy(),
+        "temporal_escalation": np.broadcast_to(temporal_escalation, expected_shape).copy(),
         "threat_score": threat_score,
         "urgency_score": urgency_score,
         "reference_policy_variant": np.full(expected_shape, variant, dtype=object),
