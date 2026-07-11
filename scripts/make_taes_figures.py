@@ -272,6 +272,7 @@ def build_assessment_protocol_context() -> dict[str, object]:
         "track_jitter_std": 0.010,
         "type_as_input": False,
         "mission_as_input": False,
+        "reference_policy_variant": "balanced",
     }
     _, threat_seq, _, metadata = generate_uav_track_sequences(
         n_tracks=900,
