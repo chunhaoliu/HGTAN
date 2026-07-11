@@ -1,6 +1,6 @@
 # Air-Target UAV Sequential Threat Assessment
 
-This project focuses on sequential multi-feature threat assessment for air-target UAVs. The layout stays compact, closer to the clear `data / exp / models / utils / run.py` style used by Autoformer and FEDformer, but the research framing follows a threat-assessment algorithm paper rather than a dataset-standardization paper. The current codebase keeps two official manuscript experiments:
+This project focuses on sequential multi-feature threat assessment for air-target UAVs. The layout stays compact, closer to the clear `data / exp / models / utils / run.py` style used by Autoformer and FEDformer, but the research framing follows a threat-assessment algorithm paper rather than a dataset-standardization paper. The current codebase keeps one paper-facing experiment chain:
 
 - `comparison`: baseline comparison on the default sequential threat-assessment protocol.
 - `ablation`: TemporalHGTAN ablation under one default setting plus two matched stress settings.
@@ -28,7 +28,7 @@ If the OneDrive-backed output directory is not writable in a local sandbox, pass
 
 The formal sequential protocol is `latent_state_masked`. Each clean scenario
 contains latent mission, platform, formation, defense, environment, and asset
-states. The released sequence generator uses these states together with clean
+states. The sequence generator uses these states together with clean
 engagement geometry to define frozen reference threat and urgency assessments
 in `data/reference_policy.py`. The model receives only the sensor-degraded
 indicator sequence: target type and the latent mission code are masked by
@@ -55,11 +55,16 @@ py run.py --suite smoke --mode speed --models traditional --n-samples 256 --itr 
 py run.py --suite seq_smoke --mode speed --models seq_lite --n-samples 128 --itr 1 --train_epochs 1
 ```
 
-Formal manuscript experiments:
+Final manuscript recipe:
 
 ```powershell
-py run.py --suite comparison --mode gpu --models seq_main --n-samples 4000 --itr 3 --train_epochs 120 --out-subdir taes_main_comparison
-py run.py --suite ablation --mode gpu --models seq_ablation --n-samples 4000 --itr 3 --train_epochs 120 --out-subdir taes_main_ablation
+$common = @('--mode','gpu','--n-samples','4000','--itr','3','--train_epochs','100','--patience','25','--batch_size','256','--num_workers','0','--no_persistent_workers','--learning_rate','0.0003','--prior_weight_alpha','0.1','--dropout','0.08','--no_mixup','--label_smoothing','0.0','--skip-existing')
+py run.py --suite comparison --models seq_main --out-subdir r3_comparison_formal_c5_s3 @common
+py run.py --suite policy_robustness --models FlatSequenceMLP,TemporalGRU,TemporalLSTM,TemporalTransformer,TemporalTCN,TemporalHGTAN --out-subdir r3_policy_formal_c5_s3 @common
+py run.py --suite scenario_holdout --models FlatSequenceMLP,TemporalGRU,TemporalLSTM,TemporalTransformer,TemporalTCN,TemporalHGTAN --out-subdir r3_holdout_formal_c5_s3 @common
+py run.py --suite ablation --models seq_ablation --out-subdir r3_ablation_formal_c5_s3 @common
+py run.py --suite observed_time --models seq_curve --out-subdir r3_observed_time_formal_c5_s3 @common
+py run.py --suite distance_degradation --models seq_curve --out-subdir r3_distance_formal_c5_s3 @common
 ```
 
 The `ablation` suite now bundles three settings under one formal experiment:
@@ -68,19 +73,7 @@ The `ablation` suite now bundles three settings under one formal experiment:
 - short-history stress at `32` frames (`6.4 s`)
 - far-range stress at `5000 m`
 
-Focused sensitivity axes:
-
-```powershell
-py run.py --suite observed_time --mode gpu --models seq_curve --n-samples 4000 --itr 3 --train_epochs 120 --batch_size 256 --no_amp --out-subdir taes_sensitivity_observed_time
-py run.py --suite distance_degradation --mode gpu --models seq_curve --n-samples 4000 --itr 3 --train_epochs 120 --batch_size 256 --no_amp --out-subdir taes_sensitivity_distance_degradation
-```
-
-Or use the compact campaign script:
-
-```powershell
-.\scripts\experiments\taes_full.ps1 -Samples 4000 -Runs 3 -Epochs 120 -Tag taes_main -NumWorkers 0
-.\scripts\experiments\taes_sensitivity.ps1 -Samples 4000 -Runs 3 -Epochs 120 -BatchSize 256 -Tag taes_sensitivity -NumWorkers 0
-```
+The observation-length and distance-degradation suites are the two focused sensitivity axes. The policy and scenario suites test coefficient dependence and internal extrapolation; neither is external field validation.
 
 On Windows, `--num_workers 0 --no_persistent_workers` is the stable fallback when DataLoader multiprocessing is noisy.
 
@@ -96,26 +89,21 @@ For the classical dual-task baselines, each MCDM family now uses its own urgency
 
 ## Manuscript Assets
 
-The paper-facing manuscript is kept in one file:
+The current revision manuscript is kept in one file outside this repository:
 
-- `../IEEE_TAES_Manuscript/IEEEtaes_Manuscript.tex`
+- `../R1_Major_Revision/Unmarked_Revised_Manuscript/Unmarked_Revised_Manuscript.tex`
 
-After the two official runs, compile the assessment summary and refresh the manuscript figure assets:
-
-```powershell
-py scripts/compile_taes_bundle.py --tag taes_main --suite-prefix taes_main
-```
-
-This default command regenerates:
-
-- `../Outputs/atuav_assessment/compiled/<tag>_summary.csv`
-- `../Outputs/atuav_assessment/compiled/<tag>_figures/`
-
-If you explicitly need internal table/figure snippets for checking, you can still request them:
+Collect only the final c5 suites before refreshing manuscript figures:
 
 ```powershell
-py scripts/compile_taes_bundle.py --tag taes_main --suite-prefix taes_main --paper-out-dir ../Outputs/atuav_assessment/compiled/taes_main_paper
+py scripts/collect_results.py --root ../Outputs/atuav_assessment/experiments --out ../Outputs/atuav_assessment/compiled --tag r3_c5 --suites r3_comparison_formal_c5_s3,r3_policy_formal_c5_s3,r3_holdout_formal_c5_s3,r3_ablation_formal_c5_s3,r3_observed_time_formal_c5_s3,r3_distance_formal_c5_s3
+py scripts/make_taes_figures.py --compiled ../Outputs/atuav_assessment/compiled --experiment-root ../Outputs/atuav_assessment/experiments --tag r3_c5 --suite-prefix r3_
 ```
+
+These commands regenerate:
+
+- `../Outputs/atuav_assessment/compiled/r3_c5_summary.csv`
+- `../Outputs/atuav_assessment/compiled/r3_c5_figures/`
 
 ## Outputs
 
@@ -126,6 +114,8 @@ Official assessment outputs:
 ../Outputs/atuav_assessment/experiments/<tag>_ablation/
 ../Outputs/atuav_assessment/experiments/<tag>_observed_time/
 ../Outputs/atuav_assessment/experiments/<tag>_distance_degradation/
+../Outputs/atuav_assessment/experiments/<tag>_policy/
+../Outputs/atuav_assessment/experiments/<tag>_holdout/
 ```
 
 Compiled manuscript assets:
@@ -135,4 +125,4 @@ Compiled manuscript assets:
 ../Outputs/atuav_assessment/compiled/<tag>_figures/
 ```
 
-Historical result folders under `../Outputs/atuav_bench/` are kept only for backward compatibility with earlier runs. The current project philosophy is simple: one default sequential assessment protocol, two official experiments, two focused sensitivity axes, one core manuscript TEX, and only the strongest evidence kept in the formal paper path.
+Historical result folders under `../Outputs/atuav_bench/` are kept only for backward compatibility. Paper claims must use one named experiment chain and must not mix old and final configurations.
