@@ -63,7 +63,11 @@ def apply_cli_overrides(config: dict[str, Any], args: Namespace) -> dict[str, An
     if getattr(args, "itr", None) is not None:
         config["run"]["num_runs"] = args.itr
 
-    if getattr(args, "seed", None) is not None:
+    explicit_seeds = getattr(args, "seeds", None)
+    if explicit_seeds is not None:
+        config["run"]["seeds"] = list(explicit_seeds)
+        config["run"]["num_runs"] = len(explicit_seeds)
+    elif getattr(args, "seed", None) is not None:
         config["run"]["seed"] = args.seed
         config["run"]["seeds"] = [args.seed + idx * 13 for idx in range(config["run"].get("num_runs", 1))]
 

@@ -398,7 +398,7 @@ class TemporalHGTAN(nn.Module):
             pooled, temporal_weights, temporal_mix = self.temporal_pool(grouped)
             pooled_groups = pooled.reshape(batch_size, NUM_GROUPS, -1)
             self.temporal_weights = temporal_weights.reshape(batch_size, NUM_GROUPS, time_steps).detach()
-            self.temporal_mix_weights = temporal_mix.reshape(batch_size, NUM_GROUPS, 3).detach()
+            self.temporal_mix_weights = temporal_mix.reshape(batch_size, NUM_GROUPS, -1).detach()
 
         for sam_layer in self.sam_layers:
             pooled_groups, attn_weights = sam_layer(pooled_groups)
@@ -496,7 +496,7 @@ class TemporalHGTANNoSynergy(TemporalHGTAN):
         pooled, temporal_weights, temporal_mix = self.temporal_pool(grouped)
         pooled_groups = pooled.reshape(batch_size, NUM_GROUPS, -1)
         self.temporal_weights = temporal_weights.reshape(batch_size, NUM_GROUPS, time_steps).detach()
-        self.temporal_mix_weights = temporal_mix.reshape(batch_size, NUM_GROUPS, 3).detach()
+        self.temporal_mix_weights = temporal_mix.reshape(batch_size, NUM_GROUPS, -1).detach()
 
         for layer in self.attn_layers:
             pooled_groups = layer(pooled_groups)

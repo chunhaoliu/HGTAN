@@ -68,6 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     training.add_argument("--itr", type=int, default=None, help="Number of repeated seeded runs.")
     training.add_argument("--num-runs", type=int, default=None, help="Alias for --itr.")
     training.add_argument("--seed", type=int, default=None)
+    training.add_argument("--seeds", type=int, nargs="+", default=None, help="Explicit repeated-run seed list.")
     training.add_argument("--train_epochs", type=int, default=None)
     training.add_argument("--epochs", type=int, default=None, help="Alias for --train_epochs.")
     training.add_argument("--batch_size", type=int, default=None)
@@ -122,6 +123,10 @@ def normalize_cli_aliases(args: argparse.Namespace) -> None:
         args.itr = args.num_runs
     if args.epochs is not None and args.train_epochs is None:
         args.train_epochs = args.epochs
+    if args.seeds is not None:
+        if args.itr is not None and args.itr != len(args.seeds):
+            raise ValueError("--itr must match the number of values passed to --seeds.")
+        args.itr = len(args.seeds)
 
 
 def resolve_settings(args: argparse.Namespace) -> list[dict]:
