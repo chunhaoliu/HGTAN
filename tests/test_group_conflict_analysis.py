@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from scripts.analyze_group_conflict import build_strata, compute_group_conflict_scores, weighted_composite_f1
 
@@ -38,4 +39,4 @@ def test_high_conflict_stratum_uses_requested_quantile():
 
 
 def test_composite_f1_matches_paper_weighting():
-    assert weighted_composite_f1(0.8, 0.4) == 0.7
+    assert weighted_composite_f1(0.8, 0.4) == pytest.approx(0.7)
