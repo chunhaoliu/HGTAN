@@ -1,0 +1,61 @@
+{
+  "status": "frozen_before_execution",
+  "selection_source": "hgtan_cursor_axis_search_v4_confirm",
+  "reference_candidate": "cursor_lr4e4_range_mix",
+  "comparators": [
+    "flat_mh_robust",
+    "gru_mh_robust",
+    "transformer_mh_robust",
+    "legacy_mh_robust"
+  ],
+  "seeds": [
+    812345701,
+    812345719,
+    812345733,
+    812345749,
+    812345763,
+    812345781,
+    812345797,
+    812345811,
+    812345827,
+    812345839
+  ],
+  "data": {
+    "n_samples": 4000,
+    "reference_policy_variant": "balanced",
+    "observed_len": 64,
+    "evaluation_axes": [
+      "default_64",
+      "short_32",
+      "far_5000m"
+    ]
+  },
+  "training": {
+    "epochs": 100,
+    "learning_rate": 0.0004,
+    "multi_prefix": 2,
+    "prefix_weight": 1.0,
+    "length_mix_prob": 0.4,
+    "range_mix_prob": 0.45,
+    "noise_std": 0.015,
+    "frame_drop_prob": 0.06,
+    "group_drop_prob": 0.12
+  },
+  "audit": {
+    "paired_unit": "generation_and_split_seed",
+    "metrics": [
+      "axis_score",
+      "final_composite_f1",
+      "short32_final_composite_f1",
+      "far5000_final_composite_f1",
+      "threat_temporal_macro_f1",
+      "threat_temporal_accuracy"
+    ],
+    "tests": [
+      "paired_t",
+      "wilcoxon"
+    ],
+    "multiple_comparison": "Holm",
+    "confidence_interval": "paired_seed_bootstrap_95"
+  }
+}
