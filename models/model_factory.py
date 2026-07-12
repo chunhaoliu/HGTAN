@@ -15,6 +15,12 @@ from models.hgtan import (
     TemporalHGTANNoPrior,
     TemporalHGTANNoSynergy,
 )
+from models.hgtan_cursor import (
+    TemporalHGTANCursor,
+    TemporalHGTANCursorDeep,
+    TemporalHGTANCursorNoReliability,
+    TemporalHGTANCursorWithMix,
+)
 from models.hgtan_v2 import (
     TemporalHGTANV2,
     TemporalHGTANV2Core,
@@ -73,6 +79,10 @@ HGTAN_MODEL_REGISTRY = {
     "TemporalHGTANV2_NoReliability": TemporalHGTANV2NoReliability,
     "TemporalHGTANV2_NoTemporal": TemporalHGTANV2NoTemporal,
     "TemporalHGTANV2_NoSynergy": TemporalHGTANV2NoSynergy,
+    "TemporalHGTAN_Cursor": TemporalHGTANCursor,
+    "TemporalHGTAN_CursorNoReliability": TemporalHGTANCursorNoReliability,
+    "TemporalHGTAN_CursorWithMix": TemporalHGTANCursorWithMix,
+    "TemporalHGTAN_CursorDeep": TemporalHGTANCursorDeep,
 }
 
 SEQUENTIAL_MODELS = frozenset(SEQUENTIAL_MODEL_REGISTRY) | frozenset(
