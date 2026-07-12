@@ -40,7 +40,18 @@ PREFIX_GRID = [8, 16, 24, 32, 48, 64]
 CANDIDATES = [
     {"name": "legacy_final", "model": "TemporalHGTAN", "prefix_weight": 0.0, "ordinal_weight": 0.0},
     {"name": "legacy_prefix05", "model": "TemporalHGTAN", "prefix_weight": 0.5, "ordinal_weight": 0.0},
+    {"name": "legacy_prefix10", "model": "TemporalHGTAN", "prefix_weight": 1.0, "ordinal_weight": 0.0},
+    {"name": "flat_prefix10", "model": "FlatSequenceMLP", "prefix_weight": 1.0, "ordinal_weight": 0.0},
     {"name": "gru_prefix05", "model": "TemporalGRU", "prefix_weight": 0.5, "ordinal_weight": 0.0},
+    {"name": "gru_prefix10", "model": "TemporalGRU", "prefix_weight": 1.0, "ordinal_weight": 0.0},
+    {"name": "lstm_prefix10", "model": "TemporalLSTM", "prefix_weight": 1.0, "ordinal_weight": 0.0},
+    {
+        "name": "transformer_prefix10",
+        "model": "TemporalTransformer",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+    },
+    {"name": "tcn_prefix10", "model": "TemporalTCN", "prefix_weight": 1.0, "ordinal_weight": 0.0},
     {"name": "v2_final", "model": "TemporalHGTANV2", "prefix_weight": 0.0, "ordinal_weight": 0.0},
     {"name": "v2_prefix025", "model": "TemporalHGTANV2", "prefix_weight": 0.25, "ordinal_weight": 0.0},
     {"name": "v2_prefix05", "model": "TemporalHGTANV2", "prefix_weight": 0.5, "ordinal_weight": 0.0},
@@ -63,6 +74,123 @@ CANDIDATES = [
         "model": "TemporalHGTANV2_NoSynergy",
         "prefix_weight": 1.0,
         "ordinal_weight": 0.0,
+    },
+    {
+        "name": "v2_robust_light",
+        "model": "TemporalHGTANV2",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
+    },
+    {
+        "name": "v2_robust_medium",
+        "model": "TemporalHGTANV2",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.015,
+        "frame_drop_prob": 0.05,
+        "group_drop_prob": 0.20,
+    },
+    {
+        "name": "v2_robust_strong",
+        "model": "TemporalHGTANV2",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.02,
+        "frame_drop_prob": 0.08,
+        "group_drop_prob": 0.30,
+    },
+    {
+        "name": "v2_noreliability_robust_medium",
+        "model": "TemporalHGTANV2_NoReliability",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.015,
+        "frame_drop_prob": 0.05,
+        "group_drop_prob": 0.20,
+    },
+    {
+        "name": "v2_noreliability_robust_light",
+        "model": "TemporalHGTANV2_NoReliability",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
+    },
+    {
+        "name": "v2_nosynergy_robust_medium",
+        "model": "TemporalHGTANV2_NoSynergy",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.015,
+        "frame_drop_prob": 0.05,
+        "group_drop_prob": 0.20,
+    },
+    {
+        "name": "v2_nosynergy_robust_light",
+        "model": "TemporalHGTANV2_NoSynergy",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
+    },
+    {
+        "name": "legacy_robust_light",
+        "model": "TemporalHGTAN",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
+    },
+    {
+        "name": "gru_robust_light",
+        "model": "TemporalGRU",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
+    },
+    {
+        "name": "flat_robust_light",
+        "model": "FlatSequenceMLP",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
+    },
+    {
+        "name": "lstm_robust_light",
+        "model": "TemporalLSTM",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
+    },
+    {
+        "name": "transformer_robust_light",
+        "model": "TemporalTransformer",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
+    },
+    {
+        "name": "tcn_robust_light",
+        "model": "TemporalTCN",
+        "prefix_weight": 1.0,
+        "ordinal_weight": 0.0,
+        "noise_std": 0.01,
+        "frame_drop_prob": 0.03,
+        "group_drop_prob": 0.10,
     },
 ]
 
@@ -109,6 +237,36 @@ def _dual_loss(
             _ordinal_loss(threat_logits, threat) + urgency_weight * _ordinal_loss(urgency_logits, urgency)
         )
     return loss
+
+
+def _augment_prefix(x: torch.Tensor, candidate: dict[str, Any]) -> torch.Tensor:
+    augmented = x.clone()
+    noise_std = float(candidate.get("noise_std", 0.0))
+    if noise_std > 0:
+        augmented = augmented + torch.randn_like(augmented) * noise_std
+
+    frame_drop_prob = float(candidate.get("frame_drop_prob", 0.0))
+    if frame_drop_prob > 0 and augmented.size(1) > 1:
+        missing = torch.rand(augmented.size(0), augmented.size(1), device=augmented.device) < frame_drop_prob
+        missing[:, 0] = False
+        hold_features = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        for step in range(1, augmented.size(1)):
+            rows = missing[:, step]
+            if rows.any():
+                indices = torch.nonzero(rows, as_tuple=False).squeeze(1)
+                features = torch.tensor(hold_features, device=augmented.device)
+                augmented[indices[:, None], step, features] = augmented[indices[:, None], step - 1, features]
+                augmented[indices, step, 15] = augmented[indices, step - 1, 15] * 0.65
+
+    group_drop_prob = float(candidate.get("group_drop_prob", 0.0))
+    if group_drop_prob > 0:
+        apply_drop = torch.rand(augmented.size(0), device=augmented.device) < group_drop_prob
+        group_index = torch.randint(0, 4, (augmented.size(0),), device=augmented.device)
+        for group in range(4):
+            rows = apply_drop & (group_index == group)
+            if rows.any():
+                augmented[rows, :, group * 4 : (group + 1) * 4] = 0.0
+    return augmented.clamp_(0.0, 1.0)
 
 
 @torch.no_grad()
@@ -224,8 +382,9 @@ def train_candidate(
                 loss = final_loss
                 if candidate["prefix_weight"] > 0 and prefix_choices:
                     prefix = int(rng.choice(prefix_choices))
+                    prefix_x = _augment_prefix(x[:, :prefix, :], candidate)
                     prefix_loss = _dual_loss(
-                        model(x[:, :prefix, :]),
+                        model(prefix_x),
                         threat_seq[:, prefix - 1],
                         urgency_seq[:, prefix - 1],
                         threat_criterion,
@@ -279,6 +438,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-samples", type=int, default=4000)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--policy-variant", default="balanced")
+    parser.add_argument("--range-m", type=float, default=None)
+    parser.add_argument("--missing-ratio", type=float, default=None)
+    parser.add_argument("--jitter-std", type=float, default=None)
     parser.add_argument("--out-dir", type=Path, default=None)
     parser.add_argument("--rerun", action="store_true")
     return parser.parse_args()
@@ -296,6 +458,12 @@ def main() -> None:
     config["train"]["min_epochs"] = min(config["train"]["min_epochs"], args.epochs)
     config["train"]["use_amp"] = True
     config["sequence"]["reference_policy_variant"] = args.policy_variant
+    if args.range_m is not None:
+        config["sequence"]["range_m"] = args.range_m
+    if args.missing_ratio is not None:
+        config["sequence"]["track_missing_ratio"] = args.missing_ratio
+    if args.jitter_std is not None:
+        config["sequence"]["track_jitter_std"] = args.jitter_std
     if args.out_dir is None:
         args.out_dir = RESULTS_DIR / "optimization" / "hgtan_v2_prefix_search_v1"
     args.out_dir.mkdir(parents=True, exist_ok=True)
