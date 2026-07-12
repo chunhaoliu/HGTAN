@@ -17,6 +17,9 @@ from models.hgtan import (
 )
 from models.hgtan_v2 import (
     TemporalHGTANV2,
+    TemporalHGTANV2Core,
+    TemporalHGTANV2CoreNoGrouping,
+    TemporalHGTANV2CoreNoTemporal,
     TemporalHGTANV2NoReliability,
     TemporalHGTANV2NoSynergy,
     TemporalHGTANV2NoTemporal,
@@ -64,6 +67,9 @@ HGTAN_MODEL_REGISTRY = {
     "TemporalHGTAN_NoPrior": TemporalHGTANNoPrior,
     "TemporalHGTAN_NoSynergy": TemporalHGTANNoSynergy,
     "TemporalHGTANV2": TemporalHGTANV2,
+    "TemporalHGTANV2_Core": TemporalHGTANV2Core,
+    "TemporalHGTANV2_CoreNoTemporal": TemporalHGTANV2CoreNoTemporal,
+    "TemporalHGTANV2_CoreNoGrouping": TemporalHGTANV2CoreNoGrouping,
     "TemporalHGTANV2_NoReliability": TemporalHGTANV2NoReliability,
     "TemporalHGTANV2_NoTemporal": TemporalHGTANV2NoTemporal,
     "TemporalHGTANV2_NoSynergy": TemporalHGTANV2NoSynergy,

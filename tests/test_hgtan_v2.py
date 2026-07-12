@@ -4,6 +4,9 @@ import torch
 
 from models.hgtan_v2 import (
     TemporalHGTANV2,
+    TemporalHGTANV2Core,
+    TemporalHGTANV2CoreNoGrouping,
+    TemporalHGTANV2CoreNoTemporal,
     TemporalHGTANV2NoReliability,
     TemporalHGTANV2NoSynergy,
     TemporalHGTANV2NoTemporal,
@@ -14,6 +17,9 @@ def test_hgtan_v2_and_ablations_return_dual_logits() -> None:
     inputs = torch.rand(3, 12, 16)
     for model_class in (
         TemporalHGTANV2,
+        TemporalHGTANV2Core,
+        TemporalHGTANV2CoreNoTemporal,
+        TemporalHGTANV2CoreNoGrouping,
         TemporalHGTANV2NoReliability,
         TemporalHGTANV2NoTemporal,
         TemporalHGTANV2NoSynergy,

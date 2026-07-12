@@ -222,3 +222,55 @@ class TemporalHGTANV2NoSynergy(TemporalHGTANV2):
     def __init__(self, *args, **kwargs):
         kwargs["use_synergy"] = False
         super().__init__(*args, **kwargs)
+
+
+class TemporalHGTANV2Core(TemporalHGTANV2):
+    """Lean grouped-temporal model after removing unsupported auxiliary paths."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs["use_reliability"] = False
+        kwargs["use_synergy"] = False
+        super().__init__(*args, **kwargs)
+
+
+class TemporalHGTANV2CoreNoTemporal(TemporalHGTANV2Core):
+    def __init__(self, *args, **kwargs):
+        kwargs["use_temporal"] = False
+        super().__init__(*args, **kwargs)
+
+
+class TemporalHGTANV2CoreNoGrouping(nn.Module):
+    """Ablation using one flat token with the same temporal evidence module."""
+
+    def __init__(
+        self,
+        num_features: int = N_FEATURES,
+        embed_dim: int = EMBED_DIM,
+        num_heads: int = NUM_HEADS,
+        num_layers: int = NUM_LAYERS,
+        hidden_dim: int = HIDDEN_DIM,
+        dropout: float = DROPOUT,
+        **kwargs,
+    ):
+        super().__init__()
+        del num_heads, num_layers, kwargs
+        self.frame_encoder = nn.Sequential(
+            nn.Linear(num_features, embed_dim),
+            nn.LayerNorm(embed_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(embed_dim, embed_dim),
+            nn.LayerNorm(embed_dim),
+        )
+        self.temporal = GroupwiseTemporalEvidence(embed_dim, dropout)
+        self.decoder = DualTaskDecoder(embed_dim, dropout=dropout, gradient_isolation=False)
+        self.temporal_weights = None
+        self.temporal_mix_weights = None
+
+    def forward(self, x: torch.Tensor):
+        _require_sequence_input(x, "TemporalHGTANV2CoreNoGrouping")
+        groups = self.frame_encoder(x).unsqueeze(2)
+        pooled, temporal_weights, temporal_mix = self.temporal(groups)
+        self.temporal_weights = temporal_weights.detach()
+        self.temporal_mix_weights = temporal_mix.detach()
+        return self.decoder(pooled)

@@ -1,0 +1,49 @@
+{
+  "status": "frozen_before_execution",
+  "selection_source": "hgtan_v2_robust_stage1",
+  "reference_candidate": "v2_robust_light",
+  "comparators": [
+    "legacy_robust_light",
+    "flat_robust_light",
+    "gru_robust_light",
+    "lstm_robust_light",
+    "transformer_robust_light",
+    "tcn_robust_light"
+  ],
+  "ablations": [
+    "v2_noreliability_robust_light",
+    "v2_nosynergy_robust_light",
+    "core_notemporal_robust_light",
+    "core_nogrouping_robust_light"
+  ],
+  "seeds": [
+    459324268,
+    127220877,
+    555402874,
+    597582339,
+    308331907,
+    754572063,
+    321298996,
+    100310030,
+    537326901,
+    396678823
+  ],
+  "data": {
+    "n_samples": 4000,
+    "reference_policy_variant": "balanced",
+    "observed_len": 64
+  },
+  "training": {
+    "epochs": 100,
+    "prefix_weight": 1.0,
+    "noise_std": 0.01,
+    "frame_drop_prob": 0.03,
+    "group_drop_prob": 0.10
+  },
+  "audit": {
+    "paired_unit": "generation_and_split_seed",
+    "tests": ["paired_t", "wilcoxon"],
+    "multiple_comparison": "Holm",
+    "confidence_interval": "paired_seed_bootstrap_95"
+  }
+}
