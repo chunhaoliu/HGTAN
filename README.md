@@ -14,7 +14,9 @@ path or archived.
 
 ## Structure
 
-- `data/`: synthetic air-target generation and sequential data pipeline.
+- `data/`: simulation-generated air-target data and the sequential pipeline.
+- `data/public/`: sanitized normalized subset exported from the same masked protocol used by the paper.
+- `artifacts/taes_r1_c5/`: frozen dataset-statistics snapshot and SHA-256 checksum.
 - `configs/paper/`: frozen machine-readable paper model, training, seed, and result identities.
 - `exp/`: experiment engine, compact suite registry, and result writer.
 - `layers/`: reusable neural blocks.
@@ -88,6 +90,44 @@ The authoritative identities and reporting convention are stored in
 sample standard deviation across the three main seeds. The stability audit
 uses ten fixed paired seeds and the same `TemporalHGTAN` registry entry as the
 three-seed comparison.
+
+## Public Reproducibility Package
+
+The repository includes a small frame-level subset generated directly from the
+paper's `latent_state_masked` protocol:
+
+```text
+data/public/atuav_public_subset.csv
+data/public/atuav_public_metadata.json
+```
+
+Regenerate it without private engineering records:
+
+```powershell
+python scripts/export_public_subset.py --seed 2026 --n-tracks 240 --output-dir data/public
+```
+
+The subset contains only normalized, degraded model inputs. The target- and
+mission-type channels are zeroed, and no latent scenario state, clean-reference
+component, or private raw engineering bound is released.
+
+The paper-scale statistics snapshot is frozen at:
+
+```text
+artifacts/taes_r1_c5/dataset_statistics.json
+artifacts/taes_r1_c5/dataset_statistics.sha256
+```
+
+Reproduce the same three-seed, 4000-track statistics and compare the generated
+JSON byte-for-byte with the frozen snapshot:
+
+```powershell
+python scripts/export_dataset_statistics.py --seeds 42 123 456 --n-samples 4000 --out artifacts/taes_r1_c5/dataset_statistics.regenerated.json --verify-against artifacts/taes_r1_c5/dataset_statistics.json
+```
+
+This package verifies the disclosed normalized benchmark and its masking
+boundary. It is not field-track validation or independent operational ground
+truth.
 
 The default `ablation` suite retains the full-window module controls:
 

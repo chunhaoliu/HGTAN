@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seeds", nargs="+", type=int, default=[42, 123, 456])
     parser.add_argument("--n-samples", type=int, default=4000)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--verify-against",
+        type=Path,
+        help="Fail unless the generated JSON is byte-identical to this frozen snapshot.",
+    )
     return parser.parse_args()
 
 
@@ -158,6 +163,12 @@ def main() -> None:
     out_path, checksum_path = write_snapshot(build_snapshot(args.seeds, args.n_samples), args.out)
     print(f"Wrote {out_path}")
     print(f"Wrote {checksum_path}")
+    if args.verify_against is not None:
+        if out_path.read_bytes() != args.verify_against.read_bytes():
+            raise SystemExit(
+                f"Generated snapshot differs from frozen artifact: {args.verify_against}"
+            )
+        print(f"Verified byte-identical to {args.verify_against}")
 
 
 if __name__ == "__main__":
