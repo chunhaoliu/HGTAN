@@ -1,4 +1,4 @@
-"""Generate compact manuscript tables for the current two-experiment paper stage."""
+"""Generate compact LaTeX tables for the TAES paper evidence chain."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ COMPARISON_MODELS = [
     "TemporalHGTAN",
 ]
 COMPARISON_LABELS = {
+    "TemporalHMM": "Temporal HMM",
     "LastFrameMLP": "Last-frame MLP",
     "MeanPoolMLP": "Mean-pooling MLP",
     "FlatSequenceMLP": "Flat-sequence MLP",
@@ -113,7 +114,11 @@ def make_comparison_table(summary: pd.DataFrame) -> str | None:
     suite = resolve_suite(summary, "comparison")
     if suite is None:
         return None
-    setting = first_existing_setting(summary, suite, ["ATUAV-Core__type_unknown", "ATUAV-Core__standard"])
+    setting = first_existing_setting(
+        summary,
+        suite,
+        ["ATUAV-Core__latent_state_masked", "ATUAV-Core__type_unknown", "ATUAV-Core__standard"],
+    )
     if setting is None:
         return None
 
@@ -129,16 +134,17 @@ def make_comparison_table(summary: pd.DataFrame) -> str | None:
                 "urgency_f1": metric(summary, suite, setting, model, "urgency", "f1"),
                 "composite_f1": metric(summary, suite, setting, model, "joint", "composite_f1"),
                 "temporal_accuracy": metric(summary, suite, setting, model, "threat_track", "temporal_accuracy"),
-                "critical_miss": metric(summary, suite, setting, model, "threat_track", "critical_track_miss_rate"),
-                "latency": metric(summary, suite, setting, model, "efficiency", "inference_time_ms_per_sample"),
+                "temporal_macro_f1": metric(summary, suite, setting, model, "threat_track", "temporal_macro_f1"),
+                "ordinal_mae": metric(summary, suite, setting, model, "threat_track", "mean_abs_ordinal_error"),
             }
         )
     if not raw_rows:
         return None
     highlighted = {
         key: highlight_flags(raw_rows, key, larger_is_better=True)
-        for key in ["threat_f1", "urgency_f1", "composite_f1", "temporal_accuracy"]
+        for key in ["threat_f1", "urgency_f1", "composite_f1", "temporal_accuracy", "temporal_macro_f1"]
     }
+    highlighted["ordinal_mae"] = highlight_flags(raw_rows, "ordinal_mae", larger_is_better=False)
     rows = []
     for row in raw_rows:
         model = row["model"]
@@ -149,18 +155,34 @@ def make_comparison_table(summary: pd.DataFrame) -> str | None:
                 fmt(row["urgency_f1"], highlight=highlighted["urgency_f1"].get(model)),
                 fmt(row["composite_f1"], highlight=highlighted["composite_f1"].get(model)),
                 fmt(row["temporal_accuracy"], highlight=highlighted["temporal_accuracy"].get(model)),
-                fmt(row["critical_miss"]),
-                fmt_number(row["latency"]),
+                fmt(row["temporal_macro_f1"], highlight=highlighted["temporal_macro_f1"].get(model)),
+                fmt(row["ordinal_mae"], highlight=highlighted["ordinal_mae"].get(model), scale=1.0, digits=3),
             ]
         )
+    row_break_after = {
+        index
+        for index, row in enumerate(raw_rows)
+        if row["model"] in {"Combined-TOPSIS", "TemporalHMM", "FlatSequenceMLP", "TemporalTCN"}
+    }
     return latex_table(
         caption=(
-            "Comparison experiment on the default sequential protocol without oracle target-type input. "
-            "Bold and underline mark the best and second-best values among reported models for the four main score columns."
+            "Main comparison under the default sequential protocol with target- and mission-type masking. "
+            "Values are means $\\pm$ sample standard deviations over three seeds. "
+            "F1 and accuracy values are percentages; ordinal MAE is measured in threat levels. "
+            "Bold and underline denote the best and second-best values."
         ),
         label="tab:comparison_experiment",
-        columns=["Model", "Threat F1", "Urgency F1", "Comp. F1", "Threat T-Acc.", "Crit. Miss", "ms/sample"],
+        columns=[
+            "Model",
+            "Threat F1 $\\uparrow$",
+            "Urgency F1 $\\uparrow$",
+            "Comp. F1 $\\uparrow$",
+            "T-Acc. $\\uparrow$",
+            "T-Macro-F1 $\\uparrow$",
+            "Ord. MAE $\\downarrow$",
+        ],
         rows=rows,
+        row_break_after=row_break_after,
     )
 
 
@@ -168,9 +190,21 @@ def make_ablation_table(summary: pd.DataFrame) -> str | None:
     suite = resolve_suite(summary, "ablation")
     if suite is None:
         return None
-    default_setting = first_existing_setting(summary, suite, ["ATUAV-Core__type_unknown", "ATUAV-Core__standard"])
-    short_setting = first_existing_setting(summary, suite, ["ATUAV-Core__type_unknown__ablation_obs32"])
-    far_setting = first_existing_setting(summary, suite, ["ATUAV-Core__type_unknown__ablation_range5000"])
+    default_setting = first_existing_setting(
+        summary,
+        suite,
+        ["ATUAV-Core__latent_state_masked", "ATUAV-Core__type_unknown", "ATUAV-Core__standard"],
+    )
+    short_setting = first_existing_setting(
+        summary,
+        suite,
+        ["ATUAV-Core__latent_state_masked__ablation_obs32", "ATUAV-Core__type_unknown__ablation_obs32"],
+    )
+    far_setting = first_existing_setting(
+        summary,
+        suite,
+        ["ATUAV-Core__latent_state_masked__ablation_range5000", "ATUAV-Core__type_unknown__ablation_range5000"],
+    )
     if default_setting is None:
         return None
 
@@ -275,31 +309,27 @@ def metric(
     row = match.iloc[0]
     return {
         "mean": float(row["mean"]),
-        "ci95": float(row["ci95"]) if "ci95" in row and pd.notna(row["ci95"]) else 0.0,
+        "std": float(row["std"]) if "std" in row and pd.notna(row["std"]) else 0.0,
         "n": float(row["n"]) if "n" in row and pd.notna(row["n"]) else 1.0,
     }
 
 
-def fmt(stat: dict[str, float] | None, *, highlight: str | None = None) -> str:
+def fmt(
+    stat: dict[str, float] | None,
+    *,
+    highlight: str | None = None,
+    scale: float = 100.0,
+    digits: int = 2,
+) -> str:
     if stat is None:
         return "--"
-    mean = 100.0 * stat["mean"]
-    ci95 = 100.0 * stat.get("ci95", 0.0)
-    if stat.get("n", 1.0) > 1 and ci95 > 0:
-        value = f"{mean:.1f}$\\pm${ci95:.1f}"
+    mean = scale * stat["mean"]
+    std = scale * stat.get("std", 0.0)
+    if stat.get("n", 1.0) > 1 and std > 0:
+        value = f"{mean:.{digits}f}$\\pm${std:.{digits}f}"
     else:
-        value = f"{mean:.1f}"
+        value = f"{mean:.{digits}f}"
     return apply_highlight(value, highlight)
-
-
-def fmt_number(stat: dict[str, float] | None) -> str:
-    if stat is None:
-        return "--"
-    mean = stat["mean"]
-    ci95 = stat.get("ci95", 0.0)
-    if stat.get("n", 1.0) > 1 and ci95 > 0:
-        return f"{mean:.3f}$\\pm${ci95:.3f}"
-    return f"{mean:.3f}"
 
 
 def highlight_flags(rows: list[dict[str, object]], key: str, *, larger_is_better: bool) -> dict[str, str]:
@@ -329,10 +359,22 @@ def latex_escape(value: str) -> str:
     return value.replace("_", r"\_")
 
 
-def latex_table(caption: str, label: str, columns: list[str], rows: list[list[str]]) -> str:
+def latex_table(
+    caption: str,
+    label: str,
+    columns: list[str],
+    rows: list[list[str]],
+    *,
+    row_break_after: set[int] | None = None,
+) -> str:
     spec = "l" + "c" * (len(columns) - 1)
     header = " & ".join(columns) + r" \\"
-    body = "\n".join(" & ".join(row) + r" \\" for row in rows)
+    body_lines = []
+    for index, row in enumerate(rows):
+        body_lines.append(" & ".join(row) + r" \\")
+        if row_break_after and index in row_break_after:
+            body_lines.append(r"\hline")
+    body = "\n".join(body_lines)
     return "\n".join(
         [
             r"\begin{table*}",

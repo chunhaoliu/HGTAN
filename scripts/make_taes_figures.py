@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import gzip
+import json
 import sys
 from pathlib import Path
 
@@ -12,20 +14,33 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
+from scipy.stats import t as student_t
 
-matplotlib.rcParams["pdf.fonttype"] = 42
-matplotlib.rcParams["ps.fonttype"] = 42
-matplotlib.rcParams["svg.fonttype"] = "none"
-matplotlib.rcParams.update(
-    {
-        "font.size": 10.5,
-        "axes.labelsize": 10.5,
-        "axes.titlesize": 10.5,
-        "xtick.labelsize": 9.0,
-        "ytick.labelsize": 9.0,
-        "legend.fontsize": 8.2,
-    }
-)
+def configure_publication_style() -> None:
+    """Set final-size typography for IEEE Transactions figure assets."""
+    sns.set_theme(style="whitegrid", context="paper")
+    matplotlib.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+            "mathtext.fontset": "stix",
+            "font.size": 8.0,
+            "axes.labelsize": 8.2,
+            "axes.titlesize": 8.2,
+            "xtick.labelsize": 7.3,
+            "ytick.labelsize": 7.3,
+            "legend.fontsize": 7.3,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",
+        }
+    )
+
+
+configure_publication_style()
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -33,17 +48,144 @@ if str(ROOT) not in sys.path:
 
 from data.sequence_generator import generate_uav_track_sequences
 from models.traditional_baselines import get_traditional_models
+from scripts.audit_lockbox_comparison import build_audit
 from scripts.paper_assets import DEFAULT_PAPER_TAG, selected_figure_stems
 from utils.project_paths import COMPILED_ROOT, EXPERIMENT_ROOT, as_str
 
 
-CURVE_MODELS = ["TOPSIS", "TemporalHMM", "TemporalGRU", "TemporalLSTM", "TemporalHGTAN"]
+CURVE_MODELS = ["TOPSIS", "TemporalHMM", "TemporalGRU", "TemporalHGTAN"]
+ROBUSTNESS_MODEL_STYLES = {
+    "TemporalGRU": {
+        "color": "#555555",
+        "marker": "s",
+        "linestyle": "--",
+        "linewidth": 1.05,
+        "markersize": 3.7,
+        "alpha": 0.90,
+        "zorder": 3,
+    },
+    "TemporalLSTM": {
+        "color": "#8a8a8a",
+        "marker": "^",
+        "linestyle": "-.",
+        "linewidth": 1.00,
+        "markersize": 3.8,
+        "alpha": 0.90,
+        "zorder": 2,
+    },
+    "TemporalHGTAN": {
+        "color": "#9e1b1f",
+        "marker": "o",
+        "linestyle": "-",
+        "linewidth": 1.45,
+        "markersize": 4.2,
+        "alpha": 1.0,
+        "zorder": 6,
+    },
+}
+OBSERVATION_MODEL_STYLES = {
+    "MeanPoolMLP": {
+        "color": "#8a8a8a",
+        "marker": "s",
+        "linestyle": ":",
+        "linewidth": 1.00,
+        "markersize": 3.7,
+        "alpha": 0.90,
+        "zorder": 2,
+    },
+    "TemporalGRU": {
+        "color": "#555555",
+        "marker": "^",
+        "linestyle": "--",
+        "linewidth": 1.05,
+        "markersize": 3.8,
+        "alpha": 0.90,
+        "zorder": 3,
+    },
+    "TemporalTransformer": {
+        "color": "#4f78a8",
+        "marker": "D",
+        "linestyle": "-.",
+        "linewidth": 1.05,
+        "markersize": 3.6,
+        "alpha": 0.92,
+        "zorder": 4,
+    },
+    "TemporalHGTAN": {
+        "color": "#9e1b1f",
+        "marker": "o",
+        "linestyle": "-",
+        "linewidth": 1.45,
+        "markersize": 4.2,
+        "alpha": 1.0,
+        "zorder": 6,
+    },
+}
 OPERATIONAL_MODEL_STYLES = {
-    "TOPSIS": {"color": "#6f7f95", "linewidth": 1.25, "alpha": 0.75, "linestyle": (0, (1.2, 1.2)), "zorder": 2},
-    "TemporalHMM": {"color": "#c5793d", "linewidth": 1.70, "alpha": 0.95, "linestyle": (0, (4.0, 2.0)), "zorder": 3},
-    "TemporalGRU": {"color": "#4c72b0", "linewidth": 1.85, "alpha": 0.95, "linestyle": "-.", "zorder": 4},
-    "TemporalLSTM": {"color": "#55a868", "linewidth": 1.85, "alpha": 0.95, "linestyle": ":", "zorder": 4},
-    "TemporalHGTAN": {"color": "#b64c4c", "linewidth": 2.45, "alpha": 1.0, "linestyle": "-", "zorder": 7},
+    "TOPSIS": {"color": "#b0b0b0", "linewidth": 0.95, "alpha": 0.95, "linestyle": (0, (1.2, 1.2)), "zorder": 2},
+    "TemporalHMM": {"color": "#777777", "linewidth": 1.05, "alpha": 0.95, "linestyle": (0, (4.0, 2.0)), "zorder": 3},
+    "TemporalGRU": {"color": "#4f4f4f", "linewidth": 1.10, "alpha": 0.95, "linestyle": "-.", "zorder": 4},
+    "TemporalLSTM": {"color": "#8c8c8c", "linewidth": 1.05, "alpha": 0.95, "linestyle": ":", "zorder": 4},
+    "TemporalHGTAN": {"color": "#9e1b1f", "linewidth": 1.55, "alpha": 1.0, "linestyle": "-", "zorder": 7},
+}
+
+TRADEOFF_MODEL_STYLES = {
+    "MeanPoolMLP": {"label": "Mean MLP", "color": "#777777", "marker": "s"},
+    "FlatSequenceMLP": {"label": "Flat MLP", "color": "#303030", "marker": "D"},
+    "TemporalGRU": {"label": "GRU", "color": "#555555", "marker": "o"},
+    "TemporalLSTM": {"label": "LSTM", "color": "#777777", "marker": "^"},
+    "TemporalTransformer": {"label": "Transformer", "color": "#555555", "marker": "P"},
+    "TemporalTCN": {"label": "TCN", "color": "#777777", "marker": "v"},
+    "TemporalHGTAN": {"label": "HGTAN", "color": "#8f1d1d", "marker": "o"},
+}
+
+BASELINE_ABBREVIATIONS = {
+    "FlatSequenceMLP": "Flat MLP",
+    "TemporalGRU": "GRU",
+    "TemporalLSTM": "LSTM",
+    "TemporalTransformer": "Transformer",
+    "TemporalTCN": "TCN",
+}
+
+DIAGNOSTIC_MODELS = [
+    "MeanPoolMLP",
+    "TemporalGRU",
+    "TemporalLSTM",
+    "TemporalTransformer",
+    "TemporalHGTAN",
+]
+DIAGNOSTIC_MODEL_STYLES = {
+    "MeanPoolMLP": {"label": "Mean MLP", "color": "#4DBBD5", "marker": "s", "linestyle": "--"},
+    "TemporalGRU": {"label": "GRU", "color": "#3C5488", "marker": "o", "linestyle": "-."},
+    "TemporalLSTM": {"label": "LSTM", "color": "#00A087", "marker": "^", "linestyle": ":"},
+    "TemporalTransformer": {"label": "Transformer", "color": "#7E57C2", "marker": "D", "linestyle": "--"},
+    "TemporalHGTAN": {"label": "HGTAN", "color": "#E64B35", "marker": "o", "linestyle": "-"},
+}
+MISSING_MODEL_STYLES = {
+    "MeanPoolMLP": {
+        "label": "Mean MLP", "color": "#56B4E9", "marker": "s", "linestyle": "--",
+        "linewidth": 1.00, "zorder": 3,
+    },
+    "TemporalGRU": {
+        "label": "GRU", "color": "#0072B2", "marker": "o", "linestyle": "-.",
+        "linewidth": 1.00, "zorder": 3,
+    },
+    "TemporalLSTM": {
+        "label": "LSTM", "color": "#009E73", "marker": "^", "linestyle": ":",
+        "linewidth": 1.05, "zorder": 3,
+    },
+    "TemporalTransformer": {
+        "label": "Transformer", "color": "#CC79A7", "marker": "D", "linestyle": "--",
+        "linewidth": 1.00, "zorder": 3,
+    },
+    "TemporalTCN": {
+        "label": "TCN", "color": "#E69F00", "marker": "v", "linestyle": "-.",
+        "linewidth": 1.00, "zorder": 3,
+    },
+    "TemporalHGTAN": {
+        "label": "HGTAN", "color": "#D55E00", "marker": "o", "linestyle": "-",
+        "linewidth": 1.55, "zorder": 7,
+    },
 }
 
 
@@ -82,14 +224,24 @@ def main() -> None:
         paper_out_dir.mkdir(parents=True, exist_ok=True)
 
     summary = filter_suites(read_csv(compiled / f"{args.tag}_summary.csv"), args)
-    sns.set_theme(style="whitegrid", context="paper")
-
+    run_metrics = filter_suites(read_csv(compiled / f"{args.tag}_run_metrics.csv"), args)
     written = plot_assessment_protocol_details(out_dir)
+    written.extend(plot_overall_tradeoff_figure(summary, out_dir))
+    written.extend(plot_stability_paired_figure(experiment_root, out_dir))
+    comparison_records = load_formal_comparison_records(experiment_root)
+    transition_case = None
+    if comparison_records:
+        written.extend(plot_classwise_final_f1_figures(comparison_records, out_dir))
+        written.extend(plot_critical_transition_figures(comparison_records, out_dir))
+        transition_case = select_representative_transition_case(comparison_records)
+    written.extend(plot_policy_holdout_comparison_figures(summary, run_metrics, out_dir))
     written.extend(plot_observed_time_main_figure(summary, out_dir))
     written.extend(plot_distance_degradation_figure(summary, out_dir))
+    written.extend(plot_missing_robustness_figures(summary, out_dir))
+    written.extend(plot_ablation_absolute_figures(run_metrics, out_dir))
     case = load_operational_case(experiment_root, summary, args) or generate_protocol_case()
     if case:
-        written.extend(plot_operational_case_figure(case, out_dir))
+        written.extend(plot_operational_case_figure(case, out_dir, timeline_case=transition_case))
 
     if paper_out_dir is not None:
         write_layered_figure_snippets(written, paper_out_dir, tex_prefix=args.tex_prefix)
@@ -117,14 +269,25 @@ def filter_suites(table: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame
     return table[matches].copy() if matches.any() else table
 
 
-def new_panel_figure(*, width: float = 4.0, height: float = 3.2) -> tuple[plt.Figure, plt.Axes]:
+def new_panel_figure(
+    *, width: float = 4.0, height: float = 3.2, journal: bool = False
+) -> tuple[plt.Figure, plt.Axes]:
     fig, ax = plt.subplots(figsize=(width, height))
-    ax.grid(True, linewidth=0.45, color="#e2e2e2", alpha=0.85)
-    ax.tick_params(labelsize=9)
+    if journal:
+        ax.grid(False)
+        ax.grid(axis="y", linewidth=0.42, color="#e6e6e6", alpha=0.82)
+        ax.tick_params(labelsize=7.2, length=2.4, width=0.6, color="#777777")
+        ax.xaxis.label.set_size(8.2)
+        ax.yaxis.label.set_size(8.2)
+    else:
+        ax.grid(True, linewidth=0.45, color="#e2e2e2", alpha=0.85)
+        ax.tick_params(labelsize=9)
     for side in ["top", "right"]:
         ax.spines[side].set_visible(False)
-    for spine in ax.spines.values():
-        spine.set_linewidth(0.8)
+    for side in ["left", "bottom"]:
+        ax.spines[side].set_linewidth(0.65 if journal else 0.8)
+        if journal:
+            ax.spines[side].set_color("#777777")
     return fig, ax
 
 
@@ -157,8 +320,10 @@ def pretty_model_name(name: str) -> str:
     return {
         "TOPSIS": "TOPSIS",
         "TemporalHMM": "Temp. HMM",
+        "MeanPoolMLP": "Mean MLP",
         "TemporalLSTM": "Temp. LSTM",
         "TemporalGRU": "Temp. GRU",
+        "TemporalTransformer": "Temp. Transformer",
         "TemporalHGTAN": "Temp. HGTAN",
     }.get(name, name)
 
@@ -415,18 +580,1324 @@ def plot_assessment_protocol_details(out_dir: Path) -> list[Path]:
     return written
 
 
+def plot_overall_tradeoff_figure(summary: pd.DataFrame, out_dir: Path) -> list[Path]:
+    """Contrast terminal classification with prefix-level dynamic fidelity."""
+    suite = resolve_suite(summary, "comparison")
+    if suite is None or summary.empty:
+        return []
+    setting = first_existing_setting(summary, suite, ["ATUAV-Core__latent_state_masked"])
+    if setting is None:
+        return []
+
+    rows: list[dict[str, float | str]] = []
+    for model, style in TRADEOFF_MODEL_STYLES.items():
+        final_f1 = metric(summary, suite, setting, model, "joint", "composite_f1")
+        temporal_f1 = metric(summary, suite, setting, model, "threat_track", "temporal_macro_f1")
+        if final_f1 is None or temporal_f1 is None:
+            continue
+        rows.append(
+            {
+                "Model": model,
+                "Label": style["label"],
+                "Composite F1 (%)": 100.0 * final_f1["mean"],
+                "Composite F1 SD": 100.0 * final_f1["std"],
+                "Threat temporal macro-F1 (%)": 100.0 * temporal_f1["mean"],
+                "Threat temporal macro-F1 SD": 100.0 * temporal_f1["std"],
+                "Source suite": suite,
+                "Setting": setting,
+                "Seeds": 3,
+            }
+        )
+    if not rows:
+        return []
+
+    source = pd.DataFrame(rows)
+    source.to_csv(out_dir / "fig_overall_tradeoff_source.csv", index=False)
+    row_order = [
+        "TemporalHGTAN",
+        "MeanPoolMLP",
+        "FlatSequenceMLP",
+        "TemporalGRU",
+        "TemporalLSTM",
+        "TemporalTransformer",
+        "TemporalTCN",
+    ]
+    row_lookup = {str(row["Model"]): row for row in rows}
+    ordered_rows = [row_lookup[model] for model in row_order if model in row_lookup]
+    y_positions = {
+        "TemporalHGTAN": 0.0,
+        "MeanPoolMLP": 1.25,
+        "FlatSequenceMLP": 2.05,
+        "TemporalGRU": 3.30,
+        "TemporalLSTM": 4.10,
+        "TemporalTransformer": 4.90,
+        "TemporalTCN": 5.70,
+    }
+    proposed = "#1F5AA6"
+    final_color = "#4E5965"
+    temporal_color = "#4FA3B5"
+    connector = "#CCD2D8"
+
+    fig, ax = new_panel_figure(width=3.36, height=2.15, journal=True)
+    ax.grid(False)
+    ax.set_axisbelow(True)
+    for tick in [60, 70, 80, 90]:
+        ax.axvline(tick, color="#E3E6E9", linewidth=0.48, zorder=0)
+    ax.axhspan(-0.42, 0.42, color="#EFF5FA", zorder=-1)
+
+    for row in ordered_rows:
+        model = str(row["Model"])
+        y = y_positions[model]
+        final_f1 = float(row["Composite F1 (%)"])
+        temporal_f1 = float(row["Threat temporal macro-F1 (%)"])
+        is_hgtan = model == "TemporalHGTAN"
+        line_color = proposed if is_hgtan else connector
+        ax.plot(
+            [temporal_f1, final_f1],
+            [y, y],
+            color=line_color,
+            linewidth=2.0 if is_hgtan else 1.25,
+            solid_capstyle="round",
+            zorder=2,
+        )
+        ax.scatter(
+            final_f1,
+            y,
+            marker="o",
+            s=35 if is_hgtan else 25,
+            facecolor=proposed if is_hgtan else final_color,
+            edgecolor="white",
+            linewidth=0.65,
+            zorder=4,
+        )
+        ax.scatter(
+            temporal_f1,
+            y,
+            marker="s",
+            s=32 if is_hgtan else 23,
+            facecolor=proposed if is_hgtan else temporal_color,
+            edgecolor="white",
+            linewidth=0.65,
+            zorder=4,
+        )
+
+    ax.set_yticks([y_positions[str(row["Model"])] for row in ordered_rows])
+    ax.set_yticklabels([str(row["Label"]) for row in ordered_rows])
+    for label, row in zip(ax.get_yticklabels(), ordered_rows):
+        if str(row["Model"]) == "TemporalHGTAN":
+            label.set_color(proposed)
+            label.set_fontweight("bold")
+    ax.tick_params(axis="y", length=0, pad=5)
+    ax.spines["left"].set_visible(False)
+    ax.set_xlim(54.0, 91.0)
+    ax.set_xticks([60, 70, 80, 90])
+    ax.set_ylim(6.15, -0.55)
+    ax.set_xlabel("Score (%)")
+    ax.legend(
+        handles=[
+            Line2D([0], [0], linestyle="none", marker="o", markersize=5.0,
+                   markerfacecolor=final_color, markeredgecolor="white", label="Final composite F1"),
+            Line2D([0], [0], linestyle="none", marker="s", markersize=4.8,
+                   markerfacecolor=temporal_color, markeredgecolor="white", label="Temporal macro-F1"),
+        ],
+        loc="lower center",
+        bbox_to_anchor=(0.52, 1.01),
+        ncol=2,
+        frameon=False,
+        fontsize=6.8,
+        handletextpad=0.35,
+        columnspacing=1.0,
+        borderaxespad=0.0,
+    )
+    path = out_dir / "fig_overall_final_dynamic_tradeoff.pdf"
+    save(fig, path)
+    return [path]
+
+
+def resolve_stability_metrics_path(experiment_root: Path) -> Path | None:
+    preferred = (
+        experiment_root
+        / "r3_stability_formal_c5_s10"
+        / "ATUAV-Core__latent_state_masked"
+        / "run_metrics.csv"
+    )
+    if preferred.exists():
+        return preferred
+    candidates = sorted(
+        experiment_root.glob("*stability*/*latent_state_masked*/run_metrics.csv"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def plot_stability_paired_figure(experiment_root: Path, out_dir: Path) -> list[Path]:
+    """Show ten-seed paired Composite-F1 differences without hiding overlap."""
+    metrics_path = resolve_stability_metrics_path(experiment_root)
+    if metrics_path is None:
+        return []
+    run_metrics = read_csv(metrics_path)
+    subset = run_metrics[
+        (run_metrics["task"] == "joint")
+        & (run_metrics["metric"] == "composite_f1")
+    ].copy()
+    if subset.empty:
+        return []
+    baselines = [
+        "FlatSequenceMLP",
+        "TemporalGRU",
+        "TemporalLSTM",
+        "TemporalTransformer",
+        "TemporalTCN",
+    ]
+    audit = build_audit(
+        run_metrics,
+        primary_model="TemporalHGTAN",
+        baselines=baselines,
+        task="joint",
+        metric="composite_f1",
+    ).set_index("baseline")
+    pivot = subset.pivot_table(index="seed", columns="model", values="value", aggfunc="first")
+    records: list[dict[str, float | int | str]] = []
+    summaries: list[dict[str, float | int | str | np.ndarray]] = []
+    for baseline in baselines:
+        if "TemporalHGTAN" not in pivot or baseline not in pivot:
+            continue
+        paired = pivot[["TemporalHGTAN", baseline]].dropna()
+        deltas = 100.0 * (paired["TemporalHGTAN"] - paired[baseline])
+        if deltas.empty:
+            continue
+        mean = float(deltas.mean())
+        sd = float(deltas.std(ddof=1)) if len(deltas) > 1 else 0.0
+        ci95 = float(student_t.ppf(0.975, len(deltas) - 1) * sd / np.sqrt(len(deltas))) if len(deltas) > 1 else 0.0
+        wins = int((deltas > 0).sum())
+        wilcoxon_holm_p = float(audit.loc[baseline, "wilcoxon_holm_p"])
+        summaries.append(
+            {
+                "Baseline": baseline,
+                "Label": BASELINE_ABBREVIATIONS[baseline],
+                "Mean delta (pp)": mean,
+                "CI95 half-width (pp)": ci95,
+                "Wins": wins,
+                "N": len(deltas),
+                "Wilcoxon Holm p": wilcoxon_holm_p,
+                "Deltas": deltas.to_numpy(dtype=float),
+            }
+        )
+        for seed, delta in deltas.items():
+            records.append(
+                {
+                    "Baseline": baseline,
+                    "Baseline label": BASELINE_ABBREVIATIONS[baseline],
+                    "Seed": int(seed),
+                    "HGTAN minus baseline Composite F1 (pp)": float(delta),
+                    "Mean delta (pp)": mean,
+                    "CI95 half-width (pp)": ci95,
+                    "HGTAN wins": wins,
+                    "Paired seeds": len(deltas),
+                    "Wilcoxon Holm p": wilcoxon_holm_p,
+                    "Source suite": metrics_path.parents[1].name,
+                }
+            )
+    if not summaries:
+        return []
+
+    source = pd.DataFrame(records)
+    source.to_csv(out_dir / "fig_stability_paired_source.csv", index=False)
+    row_order = [str(item["Baseline"]) for item in summaries]
+    seed_order = sorted(int(seed) for seed in source["Seed"].unique())
+    delta_column = "HGTAN minus baseline Composite F1 (pp)"
+    matrix = (
+        source.pivot(index="Baseline", columns="Seed", values=delta_column)
+        .reindex(index=row_order, columns=seed_order)
+        .to_numpy(dtype=float)
+    )
+    all_values = matrix[np.isfinite(matrix)]
+    color_limit = max(1.0, float(np.ceil(np.max(np.abs(all_values)) * 10.0) / 10.0))
+    cmap = LinearSegmentedColormap.from_list(
+        "paired_delta",
+        ["#D97757", "#F7F7F5", "#1F5AA6"],
+    )
+    norm = TwoSlopeNorm(vmin=-color_limit, vcenter=0.0, vmax=color_limit)
+
+    fig, ax = plt.subplots(figsize=(3.36, 2.15))
+    fig.subplots_adjust(left=0.20, right=0.99, top=0.80, bottom=0.30)
+    ax.grid(False)
+    image = ax.imshow(matrix, cmap=cmap, norm=norm, aspect="auto", interpolation="none")
+    n_rows, n_seeds = matrix.shape
+    for boundary in np.arange(-0.5, n_seeds + 0.5, 1.0):
+        ax.plot([boundary, boundary], [-0.5, n_rows - 0.5], color="white", linewidth=0.65, zorder=2)
+    for boundary in np.arange(-0.5, n_rows + 0.5, 1.0):
+        ax.plot([-0.5, n_seeds - 0.5], [boundary, boundary], color="white", linewidth=0.65, zorder=2)
+
+    ax.set_xticks(np.arange(n_seeds))
+    ax.set_xticklabels([f"S{index + 1}" for index in range(n_seeds)], fontsize=6.6)
+    ax.xaxis.tick_top()
+    ax.tick_params(axis="x", top=True, bottom=False, labeltop=True, labelbottom=False, length=0, pad=2)
+    ax.set_yticks(np.arange(n_rows))
+    ax.set_yticklabels([str(item["Label"]) for item in summaries], fontsize=7.2)
+    ax.tick_params(axis="y", length=0, pad=5)
+    ax.set_xlim(-0.5, 14.15)
+    ax.set_ylim(n_rows - 0.5, -1.02)
+    for side in ["top", "right", "bottom", "left"]:
+        ax.spines[side].set_visible(False)
+
+    header_y = -0.76
+    mean_x, wins_x, p_x = 10.45, 12.00, 13.55
+    ax.text(mean_x, header_y, r"Mean $\Delta$", ha="center", va="center", fontsize=6.7, color="#4E5965")
+    ax.text(wins_x, header_y, "Wins", ha="center", va="center", fontsize=6.7, color="#4E5965")
+    ax.text(p_x, header_y, "Holm $p$", ha="center", va="center", fontsize=6.7, color="#4E5965")
+    for row_index, item in enumerate(summaries):
+        mean = float(item["Mean delta (pp)"])
+        p_value = float(item["Wilcoxon Holm p"])
+        significant = p_value < 0.05
+        ax.text(mean_x, row_index, f"{mean:+.2f}", ha="center", va="center", fontsize=7.0, color="#303840")
+        ax.text(
+            wins_x,
+            row_index,
+            f"{int(item['Wins'])}/{int(item['N'])}",
+            ha="center",
+            va="center",
+            fontsize=7.0,
+            color="#303840",
+        )
+        ax.text(
+            p_x,
+            row_index,
+            f"{p_value:.3f}".lstrip("0"),
+            ha="center",
+            va="center",
+            fontsize=7.0,
+            color="#1F5AA6" if significant else "#59636D",
+            fontweight="bold" if significant else "normal",
+        )
+
+    colorbar_axis = ax.inset_axes([0.0, -0.29, 0.66, 0.065])
+    colorbar = fig.colorbar(image, cax=colorbar_axis, orientation="horizontal")
+    colorbar.set_ticks([-color_limit, 0.0, color_limit])
+    colorbar.ax.tick_params(labelsize=6.2, length=1.8, width=0.5, pad=1.5)
+    colorbar.outline.set_linewidth(0.45)
+    colorbar.outline.set_edgecolor("#A5ADB5")
+    colorbar.set_label("HGTAN $-$ baseline Composite F1 (pp)", fontsize=6.8, labelpad=1.5)
+    path = out_dir / "fig_stability_paired_delta.pdf"
+    save(fig, path, tight=False)
+    return [path]
+
+
+def load_formal_comparison_records(experiment_root: Path) -> list[dict]:
+    """Load the locked three-seed prediction payloads used by the main table."""
+    preferred = (
+        experiment_root
+        / "r3_comparison_formal_c5_s3"
+        / "ATUAV-Core__latent_state_masked"
+        / "seed_checkpoints"
+    )
+    checkpoint_dirs = [preferred] if preferred.exists() else []
+    if not checkpoint_dirs:
+        checkpoint_dirs = sorted(
+            experiment_root.glob("*comparison*/*latent_state_masked/seed_checkpoints"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    if not checkpoint_dirs:
+        return []
+
+    records: list[dict] = []
+    for path in sorted(checkpoint_dirs[0].glob("run_*_seed_*.json.gz")):
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            record = json.load(handle)
+        predictions = record.get("predictions", {})
+        if all(model in predictions for model in DIAGNOSTIC_MODELS):
+            records.append(record)
+    return sorted(records, key=lambda record: int(record.get("run_index", 0)))
+
+
+def per_class_f1(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int) -> list[tuple[int, int, float]]:
+    """Return 1-based class support and F1 without averaging away ordinal levels."""
+    rows = []
+    for label in range(1, n_classes + 1):
+        true_positive = int(np.sum((y_true == label) & (y_pred == label)))
+        false_positive = int(np.sum((y_true != label) & (y_pred == label)))
+        false_negative = int(np.sum((y_true == label) & (y_pred != label)))
+        support = int(np.sum(y_true == label))
+        denominator = 2 * true_positive + false_positive + false_negative
+        f1 = 2.0 * true_positive / denominator if denominator else 0.0
+        rows.append((label, support, f1))
+    return rows
+
+
+def plot_classwise_final_f1_figures(records: list[dict], out_dir: Path) -> list[Path]:
+    """Show whether aggregate gains persist across ordinal output levels."""
+    source_rows: list[dict[str, float | int | str]] = []
+    for record in records:
+        seed = int(record["seed"])
+        predictions = record["predictions"]
+        for model in DIAGNOSTIC_MODELS:
+            payload = predictions[model]
+            for task, n_classes in [("Threat", 5), ("Urgency", 3)]:
+                y_true = np.asarray(payload[f"{task.lower()}_true"], dtype=np.int64)
+                y_pred = np.asarray(payload[f"{task.lower()}_pred"], dtype=np.int64)
+                for label, support, f1 in per_class_f1(y_true, y_pred, n_classes):
+                    source_rows.append(
+                        {
+                            "Seed": seed,
+                            "Model": model,
+                            "Model label": DIAGNOSTIC_MODEL_STYLES[model]["label"],
+                            "Task": task,
+                            "Level": label,
+                            "Support": support,
+                            "F1 (%)": 100.0 * f1,
+                            "Source suite": "r3_comparison_formal_c5_s3",
+                        }
+                    )
+    source = pd.DataFrame(source_rows)
+    if source.empty:
+        return []
+    source.to_csv(out_dir / "fig_classwise_final_f1_source.csv", index=False)
+
+    written: list[Path] = []
+    for task, n_classes, y_limits, output_name in [
+        ("Threat", 5, (72.0, 96.0), "fig_classwise_threat_f1.pdf"),
+        ("Urgency", 3, (83.0, 96.0), "fig_classwise_urgency_f1.pdf"),
+    ]:
+        task_source = source[source["Task"] == task]
+        summary = (
+            task_source.groupby(["Model", "Level"], as_index=False)["F1 (%)"]
+            .agg(["mean", "std"])
+            .reset_index()
+        )
+        fig, ax = new_panel_figure(width=3.36, height=2.07, journal=True)
+        ax.grid(False)
+        ax.grid(axis="y", color="#E1E5E8", linewidth=0.48, zorder=0)
+        for model in DIAGNOSTIC_MODELS:
+            style = DIAGNOSTIC_MODEL_STYLES[model]
+            rows = summary[summary["Model"] == model].sort_values("Level")
+            if rows.empty:
+                continue
+            is_hgtan = model == "TemporalHGTAN"
+            ax.errorbar(
+                rows["Level"],
+                rows["mean"],
+                yerr=rows["std"].fillna(0.0),
+                label=str(style["label"]),
+                color=str(style["color"]),
+                marker=str(style["marker"]),
+                linestyle=str(style["linestyle"]),
+                linewidth=1.65 if is_hgtan else 1.05,
+                markersize=4.4 if is_hgtan else 3.6,
+                markeredgecolor="white",
+                markeredgewidth=0.45,
+                elinewidth=0.65,
+                capsize=1.6,
+                alpha=1.0 if is_hgtan else 0.90,
+                zorder=6 if is_hgtan else 3,
+            )
+        ax.set_xlabel(f"{task} level")
+        ax.set_ylabel("Class-wise F1 (%)")
+        ax.set_xticks(range(1, n_classes + 1))
+        ax.set_xlim(0.75, n_classes + 0.25)
+        ax.set_ylim(*y_limits)
+        ax.legend(
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.01),
+            ncol=3,
+            frameon=False,
+            fontsize=6.4,
+            handlelength=1.6,
+            columnspacing=0.9,
+            borderaxespad=0.0,
+        )
+        path = out_dir / output_name
+        save(fig, path, top_pad=0.82)
+        written.append(path)
+    return written
+
+
+def first_critical_frames(sequences: np.ndarray) -> np.ndarray:
+    """Return each track's first entry into threat levels 4--5, or -1."""
+    critical = np.asarray(sequences, dtype=np.int64) >= 4
+    has_event = critical.any(axis=1)
+    first = np.full(len(critical), -1, dtype=np.int64)
+    first[has_event] = critical[has_event].argmax(axis=1)
+    return first
+
+
+def select_representative_transition_case(records: list[dict]) -> dict | None:
+    """Select a reproducible median-gain case from every eligible test track."""
+    candidates: list[dict] = []
+    for record in records:
+        predictions = record.get("predictions", {})
+        if "TemporalHGTAN" not in predictions or "TemporalGRU" not in predictions:
+            continue
+        reference = predictions["TemporalHGTAN"]
+        threat_true = np.asarray(reference["threat_seq_true"], dtype=np.int64)
+        urgency_true = np.asarray(reference["urgency_seq_true"], dtype=np.int64)
+        true_first = first_critical_frames(threat_true)
+        transition_indices = np.flatnonzero(
+            (true_first >= 1) & (threat_true[:, -1] > threat_true[:, 0])
+        )
+        frame_interval = 0.2
+        data_profile = record.get("data_profile", [])
+        if data_profile:
+            frame_interval = float(data_profile[0].get("frame_interval", frame_interval))
+
+        for track_index in transition_indices:
+            models = {}
+            for model in CURVE_MODELS:
+                payload = predictions.get(model)
+                if payload is None:
+                    continue
+                models[model] = {
+                    "threat_pred": np.asarray(payload["threat_seq_pred"], dtype=np.int64)[track_index],
+                    "urgency_pred": np.asarray(payload["urgency_seq_pred"], dtype=np.int64)[track_index],
+                }
+            if "TemporalHGTAN" not in models or "TemporalGRU" not in models:
+                continue
+
+            target = threat_true[track_index]
+            hgtan_pred = models["TemporalHGTAN"]["threat_pred"]
+            gru_pred = models["TemporalGRU"]["threat_pred"]
+            hgtan_mae = float(np.mean(np.abs(hgtan_pred - target)))
+            gru_mae = float(np.mean(np.abs(gru_pred - target)))
+            hgtan_first = first_critical(hgtan_pred, [4, 5])
+            timing_error_frames = (
+                abs(hgtan_first - int(true_first[track_index]))
+                if hgtan_first >= 0
+                else len(target)
+            )
+            candidates.append(
+                {
+                    "threat_true": target,
+                    "urgency_true": urgency_true[track_index],
+                    "frame_interval": frame_interval,
+                    "models": models,
+                    "selection": {
+                        "seed": int(record["seed"]),
+                        "track_index": int(track_index),
+                        "gru_minus_hgtan_mae": gru_mae - hgtan_mae,
+                        "hgtan_timing_error_frames": int(timing_error_frames),
+                    },
+                }
+            )
+
+    if not candidates:
+        return None
+
+    median_gain = float(
+        np.median([case["selection"]["gru_minus_hgtan_mae"] for case in candidates])
+    )
+    candidates.sort(
+        key=lambda case: (
+            abs(case["selection"]["gru_minus_hgtan_mae"] - median_gain),
+            case["selection"]["hgtan_timing_error_frames"],
+            case["selection"]["seed"],
+            case["selection"]["track_index"],
+        )
+    )
+    selected = candidates[0]
+    selected["selection"].update(
+        {
+            "candidate_tracks": len(candidates),
+            "median_gru_minus_hgtan_mae": median_gain,
+            "selection_rule": (
+                "closest to the median GRU-minus-HGTAN sequence MAE gain; "
+                "ties use the smallest HGTAN first-alarm timing error, seed, and track index"
+            ),
+        }
+    )
+    return selected
+
+
+def plot_critical_transition_figures(records: list[dict], out_dir: Path) -> list[Path]:
+    """Aggregate first-alarm timing and event-aligned critical activation."""
+    timing_rows: list[dict[str, float | int | str]] = []
+    aligned_rows: list[dict[str, float | int | str]] = []
+    max_tolerance_frames = 20
+    alignment_radius = 12
+
+    for record in records:
+        seed = int(record["seed"])
+        predictions = record["predictions"]
+        reference = predictions["TemporalHGTAN"]
+        threat_true = np.asarray(reference["threat_seq_true"], dtype=np.int64)
+        true_first = first_critical_frames(threat_true)
+        transition_mask = (true_first >= 1) & (threat_true[:, -1] > threat_true[:, 0])
+        transition_indices = np.flatnonzero(transition_mask)
+        seq_len = threat_true.shape[1]
+
+        aligned_mask = (
+            transition_mask
+            & (true_first >= alignment_radius)
+            & (true_first <= seq_len - alignment_radius - 1)
+        )
+        aligned_indices = np.flatnonzero(aligned_mask)
+        offsets = np.arange(-alignment_radius, alignment_radius + 1, dtype=np.int64)
+        aligned_true = np.stack(
+            [threat_true[index, true_first[index] + offsets] for index in aligned_indices]
+        )
+        reference_activation = (aligned_true >= 4).mean(axis=0)
+        for offset, activation in zip(offsets, reference_activation):
+            aligned_rows.append(
+                {
+                    "Seed": seed,
+                    "Model": "CleanReference",
+                    "Model label": "Clean reference",
+                    "Relative frame": int(offset),
+                    "Relative time (s)": 0.2 * int(offset),
+                    "Critical activation rate": float(activation),
+                    "Critical disagreement rate": 0.0,
+                    "Threat-level MAE": 0.0,
+                    "Event tracks": len(aligned_indices),
+                    "Source suite": "r3_comparison_formal_c5_s3",
+                }
+            )
+
+        for model in DIAGNOSTIC_MODELS:
+            payload = predictions[model]
+            threat_pred = np.asarray(payload["threat_seq_pred"], dtype=np.int64)
+            pred_first = first_critical_frames(threat_pred)
+            detected = pred_first[transition_indices] >= 0
+            timing_error = np.full(len(transition_indices), np.inf, dtype=np.float64)
+            timing_error[detected] = (
+                pred_first[transition_indices][detected] - true_first[transition_indices][detected]
+            )
+            for tolerance in range(max_tolerance_frames + 1):
+                timing_rows.append(
+                    {
+                        "Seed": seed,
+                        "Model": model,
+                        "Model label": DIAGNOSTIC_MODEL_STYLES[model]["label"],
+                        "Tolerance frames": tolerance,
+                        "Tolerance (s)": 0.2 * tolerance,
+                        "Event-time agreement": float(np.mean(np.abs(timing_error) <= tolerance)),
+                        "Premature alarm rate": float(np.mean(timing_error < -tolerance)),
+                        "Late or missed rate": float(np.mean(timing_error > tolerance)),
+                        "Detection rate": float(np.mean(detected)),
+                        "Event tracks": len(transition_indices),
+                        "Source suite": "r3_comparison_formal_c5_s3",
+                    }
+                )
+
+            aligned_pred = np.stack(
+                [threat_pred[index, true_first[index] + offsets] for index in aligned_indices]
+            )
+            activation = (aligned_pred >= 4).mean(axis=0)
+            disagreement = ((aligned_pred >= 4) != (aligned_true >= 4)).mean(axis=0)
+            mae = np.abs(aligned_pred - aligned_true).mean(axis=0)
+            for offset, activation_value, disagreement_value, mae_value in zip(
+                offsets, activation, disagreement, mae
+            ):
+                aligned_rows.append(
+                    {
+                        "Seed": seed,
+                        "Model": model,
+                        "Model label": DIAGNOSTIC_MODEL_STYLES[model]["label"],
+                        "Relative frame": int(offset),
+                        "Relative time (s)": 0.2 * int(offset),
+                        "Critical activation rate": float(activation_value),
+                        "Critical disagreement rate": float(disagreement_value),
+                        "Threat-level MAE": float(mae_value),
+                        "Event tracks": len(aligned_indices),
+                        "Source suite": "r3_comparison_formal_c5_s3",
+                    }
+                )
+
+    timing_source = pd.DataFrame(timing_rows)
+    aligned_source = pd.DataFrame(aligned_rows)
+    if timing_source.empty or aligned_source.empty:
+        return []
+    timing_source.to_csv(out_dir / "fig_event_timing_agreement_source.csv", index=False)
+    aligned_source.to_csv(out_dir / "fig_event_aligned_disagreement_source.csv", index=False)
+    window_rows: list[dict[str, float | int | str]] = []
+    for (seed, model), rows in aligned_source[
+        aligned_source["Model"] != "CleanReference"
+    ].groupby(["Seed", "Model"]):
+        pre_error = float(
+            rows[rows["Relative time (s)"] < 0]["Critical disagreement rate"].mean()
+        )
+        post_error = float(
+            rows[rows["Relative time (s)"] > 0]["Critical disagreement rate"].mean()
+        )
+        window_rows.append(
+            {
+                "Seed": int(seed),
+                "Model": str(model),
+                "Model label": DIAGNOSTIC_MODEL_STYLES[str(model)]["label"],
+                "Pre-event disagreement (%)": 100.0 * pre_error,
+                "Post-event disagreement (%)": 100.0 * post_error,
+                "Balanced window disagreement (%)": 50.0 * (pre_error + post_error),
+                "Source suite": "r3_comparison_formal_c5_s3",
+            }
+        )
+    pd.DataFrame(window_rows).to_csv(
+        out_dir / "fig_event_aligned_window_summary.csv",
+        index=False,
+    )
+
+    written: list[Path] = []
+    timing_summary = (
+        timing_source.groupby(["Model", "Tolerance (s)"], as_index=False)["Event-time agreement"]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+    fig, ax = new_panel_figure(width=3.36, height=2.07, journal=True)
+    ax.grid(False)
+    ax.grid(axis="y", color="#E1E5E8", linewidth=0.48, zorder=0)
+    for model in DIAGNOSTIC_MODELS:
+        style = DIAGNOSTIC_MODEL_STYLES[model]
+        rows = timing_summary[timing_summary["Model"] == model].sort_values("Tolerance (s)")
+        x = rows["Tolerance (s)"].to_numpy(dtype=float)
+        mean = 100.0 * rows["mean"].to_numpy(dtype=float)
+        spread = 100.0 * rows["std"].fillna(0.0).to_numpy(dtype=float)
+        is_hgtan = model == "TemporalHGTAN"
+        ax.fill_between(x, mean - spread, mean + spread, color=str(style["color"]), alpha=0.08, linewidth=0)
+        ax.plot(
+            x,
+            mean,
+            label=str(style["label"]),
+            color=str(style["color"]),
+            marker=str(style["marker"]),
+            markevery=4,
+            linestyle=str(style["linestyle"]),
+            linewidth=1.70 if is_hgtan else 1.05,
+            markersize=4.2 if is_hgtan else 3.3,
+            markeredgecolor="white",
+            markeredgewidth=0.4,
+            zorder=6 if is_hgtan else 3,
+        )
+    ax.set_xlabel(r"Allowed first-alarm error $\tau$ (s)")
+    ax.set_ylabel(r"Events within $\pm\tau$ (\%)")
+    ax.set_xlim(0.0, 4.0)
+    ax.set_xticks([0, 1, 2, 3, 4])
+    ax.set_ylim(0.0, 82.0)
+    ax.set_yticks([0, 20, 40, 60, 80])
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.01),
+        ncol=3,
+        frameon=False,
+        fontsize=6.4,
+        handlelength=1.6,
+        columnspacing=0.9,
+        borderaxespad=0.0,
+    )
+    path = out_dir / "fig_event_timing_agreement.pdf"
+    save(fig, path, top_pad=0.82)
+    written.append(path)
+
+    aligned_summary = (
+        aligned_source[aligned_source["Model"] != "CleanReference"]
+        .groupby(["Model", "Relative time (s)"], as_index=False)["Critical disagreement rate"]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+    fig, ax = new_panel_figure(width=3.36, height=2.07, journal=True)
+    ax.grid(False)
+    ax.grid(axis="y", color="#E1E5E8", linewidth=0.48, zorder=0)
+    for model in DIAGNOSTIC_MODELS:
+        style = DIAGNOSTIC_MODEL_STYLES[model]
+        rows = aligned_summary[aligned_summary["Model"] == model].sort_values("Relative time (s)")
+        x = rows["Relative time (s)"].to_numpy(dtype=float)
+        mean = 100.0 * rows["mean"].to_numpy(dtype=float)
+        spread = 100.0 * rows["std"].fillna(0.0).to_numpy(dtype=float)
+        is_hgtan = model == "TemporalHGTAN"
+        ax.fill_between(
+            x,
+            np.maximum(0.0, mean - spread),
+            np.minimum(100.0, mean + spread),
+            color=str(style["color"]),
+            alpha=0.07,
+            linewidth=0,
+        )
+        ax.plot(
+            x,
+            mean,
+            label=str(style["label"]),
+            color=str(style["color"]),
+            marker=str(style["marker"]),
+            markevery=4,
+            linestyle=str(style["linestyle"]),
+            linewidth=1.70 if is_hgtan else 1.05,
+            markersize=4.2 if is_hgtan else 3.3,
+            markeredgecolor="white",
+            markeredgewidth=0.4,
+            zorder=6 if is_hgtan else 3,
+        )
+    ax.axvspan(-0.025, 0.025, color="#777777", alpha=0.22, linewidth=0, zorder=1)
+    ax.set_xlabel("Time relative to reference event (s)")
+    ax.set_ylabel("Critical-state error (%)")
+    ax.set_xlim(-2.4, 2.4)
+    ax.set_xticks([-2.4, -1.2, 0.0, 1.2, 2.4])
+    ax.set_ylim(0.0, 94.0)
+    ax.set_yticks([0, 20, 40, 60, 80])
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.01),
+        ncol=3,
+        frameon=False,
+        fontsize=6.2,
+        handlelength=1.6,
+        columnspacing=0.8,
+        borderaxespad=0.0,
+    )
+    path = out_dir / "fig_event_aligned_disagreement.pdf"
+    save(fig, path, top_pad=0.82)
+    written.append(path)
+    return written
+
+
+def policy_condition_label(setting: str) -> str:
+    if "policy_balanced" in setting:
+        return "Balanced"
+    if "policy_consequence_first" in setting:
+        return "Consequence-first"
+    if "policy_access_first" in setting:
+        return "Access-first"
+    return setting
+
+
+def holdout_condition_label(setting: str) -> str:
+    labels = {
+        "Probe_Surveillance": "Probe-Surveillance",
+        "EW_Contested": "EW-Contested",
+        "Strike_Penetration": "Strike-Penetration",
+        "Saturation_Overload": "Saturation-Overload",
+    }
+    for token, label in labels.items():
+        if token in setting:
+            return label
+    return setting
+
+
+def compute_margin_rows(
+    summary: pd.DataFrame,
+    suite: str,
+    settings: list[str],
+    *,
+    condition_labels: dict[str, str],
+    include_mean: bool,
+) -> list[dict[str, float | str]]:
+    metric_specs = [
+        ("Composite F1", "joint", "composite_f1", True, 100.0, "pp"),
+        ("Temporal accuracy", "threat_track", "temporal_accuracy", True, 100.0, "pp"),
+        ("Ordinal MAE", "threat_track", "mean_abs_ordinal_error", False, 1.0, "raw"),
+    ]
+    models = [
+        "FlatSequenceMLP",
+        "TemporalGRU",
+        "TemporalLSTM",
+        "TemporalTransformer",
+        "TemporalTCN",
+        "TemporalHGTAN",
+    ]
+    records: list[dict[str, float | str]] = []
+    values_by_metric: dict[tuple[str, str], list[float]] = {}
+    for setting in settings:
+        for metric_label, task, metric_name, higher_better, scale, unit in metric_specs:
+            values: dict[str, float] = {}
+            for model in models:
+                result = metric(summary, suite, setting, model, task, metric_name)
+                if result is not None:
+                    values[model] = float(result["mean"])
+                    values_by_metric.setdefault((metric_name, model), []).append(float(result["mean"]))
+            if "TemporalHGTAN" not in values or len(values) < 2:
+                continue
+            alternatives = {model: value for model, value in values.items() if model != "TemporalHGTAN"}
+            best_model = (max if higher_better else min)(alternatives, key=alternatives.get)
+            hgtan = values["TemporalHGTAN"]
+            best = alternatives[best_model]
+            margin = (hgtan - best) if higher_better else (best - hgtan)
+            records.append(
+                {
+                    "Condition": condition_labels[setting],
+                    "Metric": metric_label,
+                    "HGTAN": scale * hgtan,
+                    "Best alternative": scale * best,
+                    "Alternative model": best_model,
+                    "Alternative label": BASELINE_ABBREVIATIONS[best_model],
+                    "HGTAN advantage": scale * margin,
+                    "Unit": unit,
+                    "Source suite": suite,
+                    "Source setting": setting,
+                }
+            )
+
+    if include_mean:
+        for metric_label, _task, metric_name, higher_better, scale, unit in metric_specs:
+            means = {
+                model: float(np.mean(values))
+                for model in models
+                if (values := values_by_metric.get((metric_name, model)))
+            }
+            if "TemporalHGTAN" not in means or len(means) < 2:
+                continue
+            alternatives = {model: value for model, value in means.items() if model != "TemporalHGTAN"}
+            best_model = (max if higher_better else min)(alternatives, key=alternatives.get)
+            hgtan = means["TemporalHGTAN"]
+            best = alternatives[best_model]
+            margin = (hgtan - best) if higher_better else (best - hgtan)
+            records.append(
+                {
+                    "Condition": "Mean",
+                    "Metric": metric_label,
+                    "HGTAN": scale * hgtan,
+                    "Best alternative": scale * best,
+                    "Alternative model": best_model,
+                    "Alternative label": BASELINE_ABBREVIATIONS[best_model],
+                    "HGTAN advantage": scale * margin,
+                    "Unit": unit,
+                    "Source suite": suite,
+                    "Source setting": "mean_over_holdouts",
+                }
+            )
+    return records
+
+
+def margin_color(value: float, column_scale: float) -> tuple[float, float, float]:
+    base = matplotlib.colors.to_rgb("#4f8665" if value >= 0 else "#b8644e")
+    strength = 0.20 + 0.60 * min(abs(value) / max(column_scale, 1e-12), 1.0)
+    return tuple((1.0 - strength) + strength * component for component in base)
+
+
+def draw_margin_matrix(records: list[dict[str, float | str]], path: Path, condition_order: list[str]) -> None:
+    metric_order = ["Composite F1", "Temporal accuracy", "Ordinal MAE"]
+    lookup = {(str(row["Condition"]), str(row["Metric"])): row for row in records}
+    scales = {
+        metric_name: max(
+            [abs(float(row["HGTAN advantage"])) for row in records if row["Metric"] == metric_name] or [1.0]
+        )
+        for metric_name in metric_order
+    }
+    image = np.ones((len(condition_order), len(metric_order), 3), dtype=float)
+    for row_idx, condition in enumerate(condition_order):
+        for col_idx, metric_name in enumerate(metric_order):
+            row = lookup[(condition, metric_name)]
+            image[row_idx, col_idx, :] = margin_color(float(row["HGTAN advantage"]), scales[metric_name])
+
+    fig, ax = plt.subplots(figsize=(3.65, 1.78 + 0.26 * len(condition_order)))
+    ax.imshow(image, aspect="auto", interpolation="none")
+    ax.grid(False, which="major")
+    ax.set_xticks(np.arange(len(metric_order)))
+    ax.set_xticklabels(["Composite F1\n(pp)", "Temporal accuracy\n(pp)", "Ordinal MAE"], fontsize=7.2)
+    ax.xaxis.tick_top()
+    ax.tick_params(axis="x", length=0, pad=4)
+    ax.set_yticks(np.arange(len(condition_order)))
+    ax.set_yticklabels(condition_order, fontsize=7.2)
+    ax.tick_params(axis="y", length=0, pad=4)
+    ax.set_xticks(np.arange(-0.5, len(metric_order), 1.0), minor=True)
+    ax.set_yticks(np.arange(-0.5, len(condition_order), 1.0), minor=True)
+    ax.grid(which="minor", color="white", linewidth=1.5)
+    ax.tick_params(which="minor", bottom=False, left=False)
+    for row_idx, condition in enumerate(condition_order):
+        for col_idx, metric_name in enumerate(metric_order):
+            row = lookup[(condition, metric_name)]
+            value = float(row["HGTAN advantage"])
+            value_text = f"{value:+.3f}" if metric_name == "Ordinal MAE" else f"{value:+.2f}"
+            ax.text(
+                col_idx,
+                row_idx,
+                f"{value_text}\n{row['Alternative label']}",
+                ha="center",
+                va="center",
+                fontsize=6.8,
+                color="#232323",
+                linespacing=1.18,
+                fontweight="normal",
+            )
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    save(fig, path)
+
+
+def plot_policy_holdout_margin_figures(summary: pd.DataFrame, out_dir: Path) -> list[Path]:
+    policy_suite = resolve_suite(summary, "policy")
+    holdout_suite = resolve_suite(summary, "holdout")
+    if summary.empty or policy_suite is None or holdout_suite is None:
+        return []
+
+    policy_settings = sorted(summary[summary["source_suite"] == policy_suite]["setting"].dropna().astype(str).unique())
+    holdout_settings = sorted(summary[summary["source_suite"] == holdout_suite]["setting"].dropna().astype(str).unique())
+    policy_labels = {setting: policy_condition_label(setting) for setting in policy_settings}
+    holdout_labels = {setting: holdout_condition_label(setting) for setting in holdout_settings}
+    policy_records = compute_margin_rows(
+        summary,
+        policy_suite,
+        policy_settings,
+        condition_labels=policy_labels,
+        include_mean=False,
+    )
+    holdout_records = compute_margin_rows(
+        summary,
+        holdout_suite,
+        holdout_settings,
+        condition_labels=holdout_labels,
+        include_mean=True,
+    )
+    if not policy_records or not holdout_records:
+        return []
+
+    pd.DataFrame(policy_records + holdout_records).to_csv(
+        out_dir / "fig_policy_holdout_margin_source.csv", index=False
+    )
+    policy_order = ["Balanced", "Consequence-first", "Access-first"]
+    holdout_order = [
+        "Probe-Surveillance",
+        "EW-Contested",
+        "Strike-Penetration",
+        "Saturation-Overload",
+        "Mean",
+    ]
+    policy_path = out_dir / "fig_policy_margin_matrix.pdf"
+    holdout_path = out_dir / "fig_holdout_margin_matrix.pdf"
+    draw_margin_matrix(policy_records, policy_path, policy_order)
+    draw_margin_matrix(holdout_records, holdout_path, holdout_order)
+    return [policy_path, holdout_path]
+
+
+def compute_paired_comparison_rows(
+    summary: pd.DataFrame,
+    run_metrics: pd.DataFrame,
+    suite: str,
+    settings: list[str],
+    *,
+    condition_labels: dict[str, str],
+) -> list[dict[str, float | str]]:
+    metric_specs = [
+        ("Composite F1", "joint", "composite_f1"),
+        ("Temporal accuracy", "threat_track", "temporal_accuracy"),
+    ]
+    models = [
+        "FlatSequenceMLP",
+        "TemporalGRU",
+        "TemporalLSTM",
+        "TemporalTransformer",
+        "TemporalTCN",
+        "TemporalHGTAN",
+    ]
+    records: list[dict[str, float | str]] = []
+    for setting in settings:
+        for metric_label, task, metric_name in metric_specs:
+            values: dict[str, dict[str, float]] = {}
+            for model in models:
+                result = metric(summary, suite, setting, model, task, metric_name)
+                if result is not None:
+                    values[model] = result
+            if "TemporalHGTAN" not in values or len(values) < 2:
+                continue
+            alternatives = {model: value for model, value in values.items() if model != "TemporalHGTAN"}
+            best_model = max(alternatives, key=lambda model: alternatives[model]["mean"])
+            seed_rows = run_metrics[
+                (run_metrics["source_suite"] == suite)
+                & (run_metrics["setting"] == setting)
+                & (run_metrics["task"] == task)
+                & (run_metrics["metric"] == metric_name)
+                & (run_metrics["model"].isin(["TemporalHGTAN", best_model]))
+            ].copy()
+            if seed_rows.empty:
+                continue
+            seed_rows["value"] = pd.to_numeric(seed_rows["value"], errors="coerce")
+            paired = (
+                seed_rows.dropna(subset=["seed", "value"])
+                .groupby(["seed", "model"], as_index=False)["value"]
+                .mean()
+                .pivot(index="seed", columns="model", values="value")
+                .dropna(subset=["TemporalHGTAN", best_model])
+            )
+            if paired.empty:
+                continue
+            paired["Delta (pp)"] = 100.0 * (paired["TemporalHGTAN"] - paired[best_model])
+            mean_delta = float(paired["Delta (pp)"].mean())
+            sd_delta = float(paired["Delta (pp)"].std(ddof=1)) if len(paired) > 1 else 0.0
+            for seed, row in paired.iterrows():
+                records.append(
+                    {
+                        "Stress family": "Policy" if "policy" in suite else "Held-out family",
+                        "Condition": condition_labels[setting],
+                        "Metric": metric_label,
+                        "Seed": int(seed),
+                        "HGTAN (%)": 100.0 * float(row["TemporalHGTAN"]),
+                        "Alternative (%)": 100.0 * float(row[best_model]),
+                        "Delta (pp)": float(row["Delta (pp)"]),
+                        "Mean delta (pp)": mean_delta,
+                        "SD delta (pp)": sd_delta,
+                        "N": int(len(paired)),
+                        "Alternative model": best_model,
+                        "Alternative label": BASELINE_ABBREVIATIONS[best_model],
+                        "Source suite": suite,
+                        "Source setting": setting,
+                    }
+                )
+    return records
+
+
+def draw_paired_margin_panel(
+    records: list[dict[str, float | str]],
+    *,
+    condition_order: list[str],
+    path: Path,
+) -> None:
+    metric_styles = {
+        "Composite F1": {"color": "#3F6FA0", "short": "F1", "legend": "Composite F1"},
+        "Temporal accuracy": {
+            "color": "#C65349",
+            "short": "T-Acc.",
+            "legend": "Temporal acc.",
+        },
+    }
+    fig, ax = new_panel_figure(width=3.65, height=2.12, journal=True)
+    ax.grid(False)
+    ax.grid(axis="x", linewidth=0.42, color="#dedede", linestyle=":", alpha=0.95)
+    ax.axvline(0.0, color="#8a8a8a", linewidth=0.70, zorder=3)
+    y = np.arange(len(condition_order), dtype=float)
+    offsets = {"Composite F1": -0.13, "Temporal accuracy": 0.13}
+    tick_labels: list[str] = []
+    interval_bounds: list[float] = [0.0]
+    for idx, condition in enumerate(condition_order):
+        alternative_labels: list[str] = []
+        for metric_name, style in metric_styles.items():
+            rows = [
+                row for row in records if row["Condition"] == condition and row["Metric"] == metric_name
+            ]
+            if not rows:
+                continue
+            row_y = idx + offsets[metric_name]
+            mean_delta = float(rows[0]["Mean delta (pp)"])
+            sd_delta = float(rows[0]["SD delta (pp)"])
+            ax.barh(
+                row_y,
+                2.0 * sd_delta,
+                left=mean_delta - sd_delta,
+                height=0.075,
+                color=style["color"],
+                edgecolor="none",
+                alpha=0.28,
+                zorder=1,
+            )
+            ax.barh(
+                row_y,
+                mean_delta,
+                height=0.19,
+                color=style["color"],
+                edgecolor="none",
+                alpha=0.94,
+                zorder=2,
+            )
+            interval_bounds.extend([mean_delta - sd_delta, mean_delta + sd_delta])
+            alternative_labels.append(str(rows[0]["Alternative label"]))
+        tick_labels.append(f"{condition}\n[{' / '.join(alternative_labels)}]")
+    ax.set_yticks(y)
+    ax.set_yticklabels(tick_labels, fontsize=6.8, linespacing=1.05)
+    ax.invert_yaxis()
+    lower = min(interval_bounds)
+    upper = max(interval_bounds)
+    padding = max(0.7, 0.08 * (upper - lower))
+    left = 2.0 * np.floor((min(0.0, lower) - padding) / 2.0)
+    right = 2.0 * np.ceil((max(0.0, upper) + padding) / 2.0)
+    ax.set_xlim(left, right)
+    ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=6, integer=True))
+    ax.set_xlabel("HGTAN - strongest alternative (percentage points)")
+    handles = [
+        Patch(facecolor=style["color"], edgecolor="none", label=style["legend"])
+        for metric_name, style in metric_styles.items()
+    ]
+    ax.legend(
+        handles=handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.015),
+        ncol=2,
+        frameon=False,
+        fontsize=6.7,
+        handlelength=1.25,
+        handletextpad=0.4,
+        columnspacing=1.0,
+        borderaxespad=0.0,
+    )
+    fig.subplots_adjust(left=0.36, right=0.98, bottom=0.23, top=0.82)
+    save(fig, path, tight=False)
+
+
+def plot_policy_holdout_comparison_figures(
+    summary: pd.DataFrame,
+    run_metrics: pd.DataFrame,
+    out_dir: Path,
+) -> list[Path]:
+    policy_suite = resolve_suite(summary, "policy")
+    holdout_suite = resolve_suite(summary, "holdout")
+    if summary.empty or run_metrics.empty or policy_suite is None or holdout_suite is None:
+        return []
+    policy_settings = sorted(summary[summary["source_suite"] == policy_suite]["setting"].dropna().astype(str).unique())
+    holdout_settings = sorted(summary[summary["source_suite"] == holdout_suite]["setting"].dropna().astype(str).unique())
+    policy_labels = {setting: policy_condition_label(setting) for setting in policy_settings}
+    holdout_labels = {setting: holdout_condition_label(setting) for setting in holdout_settings}
+    policy_records = compute_paired_comparison_rows(
+        summary, run_metrics, policy_suite, policy_settings, condition_labels=policy_labels
+    )
+    holdout_records = compute_paired_comparison_rows(
+        summary, run_metrics, holdout_suite, holdout_settings, condition_labels=holdout_labels
+    )
+    if not policy_records or not holdout_records:
+        return []
+    pd.DataFrame(policy_records + holdout_records).to_csv(
+        out_dir / "fig_policy_holdout_paired_source.csv", index=False
+    )
+    specs = [
+        (policy_records, ["Balanced", "Consequence-first", "Access-first"], "fig_policy_paired_margins.pdf"),
+        (
+            holdout_records,
+            ["Probe-Surveillance", "EW-Contested", "Strike-Penetration", "Saturation-Overload"],
+            "fig_holdout_paired_margins.pdf",
+        ),
+    ]
+    written: list[Path] = []
+    for records, order, filename in specs:
+        path = out_dir / filename
+        draw_paired_margin_panel(records, condition_order=order, path=path)
+        written.append(path)
+    return written
+
+
+def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> list[Path]:
+    """Plot default module ablations and fixed-endpoint temporal controls."""
+    if run_metrics.empty:
+        return []
+
+    default_suite = resolve_suite_excluding(run_metrics, "ablation", excluded=("fixed_endpoint",))
+    fixed_suite = resolve_suite_containing(run_metrics, ("fixed_endpoint", "ablation"))
+    if default_suite is None or fixed_suite is None:
+        return []
+
+    default_setting = first_existing_setting(
+        run_metrics,
+        default_suite,
+        ["ATUAV-Core__latent_state_masked"],
+    )
+    fixed_setting = first_existing_setting(
+        run_metrics,
+        fixed_suite,
+        ["ATUAV-Core__latent_state_masked__ablation_fixed_endpoint_obs32"],
+    )
+    if default_setting is None or fixed_setting is None:
+        return []
+
+    module_specs = [
+        ("TemporalHGTAN", "Full", "#F04B3A", ""),
+        ("TemporalHGTAN_MeanPool", "w/o T", "#22A7E0", ""),
+        ("TemporalHGTAN_NoPrior", "w/o P", "#35C26B", ""),
+        ("TemporalHGTAN_NoSynergy", "w/o S", "#8F5BD8", ""),
+    ]
+    temporal_summary_specs = [
+        ("TemporalHGTAN", "Adaptive", "#F04B3A", ""),
+        ("TemporalHGTAN_MeanPool", "Mean", "#22A7E0", ""),
+        ("TemporalHGTAN_LastFrame", "Last", "#F2A900", ""),
+    ]
+    metric_specs = [
+        ("Composite F1", "joint", "composite_f1", "composite_f1"),
+        ("Temporal macro-F1", "threat_track", "temporal_macro_f1", "temporal_f1"),
+    ]
+
+    records: list[dict[str, float | int | str]] = []
+    condition_specs = [
+        ("Default modules", default_suite, default_setting, module_specs),
+        ("Fixed-endpoint summaries", fixed_suite, fixed_setting, temporal_summary_specs),
+    ]
+    for condition, suite, setting, source_specs in condition_specs:
+        suite_rows = run_metrics[run_metrics["source_suite"] == suite]
+        for metric_label, task, metric_name, _metric_stem in metric_specs:
+            metric_rows = suite_rows[
+                (suite_rows["setting"] == setting)
+                & (suite_rows["task"] == task)
+                & (suite_rows["metric"] == metric_name)
+            ]
+            for model, short_label, _color, _hatch in source_specs:
+                model_rows = metric_rows[metric_rows["model"] == model]
+                for row in model_rows.itertuples(index=False):
+                    records.append(
+                        {
+                            "source_suite": suite,
+                            "source_setting": setting,
+                            "condition": condition,
+                            "metric": metric_label,
+                            "model": model,
+                            "model_label": short_label,
+                            "seed": int(row.seed),
+                            "value_percent": 100.0 * float(row.value),
+                        }
+                    )
+
+    if not records:
+        return []
+
+    source = pd.DataFrame(records)
+    source.to_csv(out_dir / "fig_ablation_absolute_source.csv", index=False)
+    summary = (
+        source.groupby(["condition", "metric", "model", "model_label"], as_index=False)["value_percent"]
+        .agg(["mean", "std", "count"])
+        .reset_index()
+    )
+
+    written: list[Path] = []
+    for metric_label, _task, _metric_name, metric_stem in metric_specs:
+        panel_specs = [
+            ("Default modules", "default", module_specs, True),
+            ("Fixed-endpoint summaries", "fixed_summary", temporal_summary_specs, False),
+        ]
+        for condition, condition_stem, display_specs, show_ylabel in panel_specs:
+            panel = summary[
+                (summary["condition"] == condition) & (summary["metric"] == metric_label)
+            ].set_index("model")
+            if panel.empty:
+                continue
+
+            means = np.asarray([float(panel.loc[model, "mean"]) for model, *_rest in display_specs])
+            value_span = float(np.max(means) - np.min(means))
+            y_margin = max(0.18, 0.28 * value_span)
+            y_min = 0.1 * np.floor(10.0 * (float(np.min(means)) - y_margin))
+            y_max = 0.1 * np.ceil(10.0 * (float(np.max(means)) + y_margin))
+            x_step = 0.88 if condition_stem == "fixed_summary" else 0.76
+            x = x_step * np.arange(len(display_specs), dtype=float)
+            fig, ax = new_panel_figure(width=2.28, height=1.38, journal=True)
+            ax.grid(False)
+            ax.grid(axis="y", linewidth=0.34, color="#D8D8D8", linestyle="-", alpha=0.75, zorder=0)
+            bars = ax.bar(
+                x,
+                means,
+                width=0.58,
+                color=[spec[2] for spec in display_specs],
+                edgecolor="#40505E",
+                linewidth=0.62,
+                zorder=3,
+            )
+            for bar, (_model, _label, _color, hatch) in zip(bars, display_specs):
+                bar.set_hatch(hatch)
+            ax.set_xlim(x[0] - 0.34, x[-1] + 0.34)
+            for spine in ax.spines.values():
+                spine.set_visible(True)
+                spine.set_color("#6A6A6A")
+                spine.set_linewidth(0.58)
+            ax.set_xticks(x)
+            tick_fontsize = 7.2 if condition_stem == "fixed_summary" else 7.5
+            ax.set_xticklabels([spec[1] for spec in display_specs], fontsize=tick_fontsize)
+            ax.tick_params(axis="x", length=0, pad=1.3)
+            ax.tick_params(axis="y", labelsize=7.3, width=0.55, length=2.2)
+            ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(4))
+            ax.set_ylim(y_min, y_max)
+            if show_ylabel:
+                ax.set_ylabel(f"{metric_label} (%)", fontsize=8.4)
+            else:
+                ax.set_ylabel("")
+            ax.set_xlabel("")
+            path = out_dir / f"fig_ablation_{condition_stem}_{metric_stem}.pdf"
+            save(fig, path)
+            written.append(path)
+    return written
+
+
 def plot_observed_time_main_figure(summary: pd.DataFrame, out_dir: Path) -> list[Path]:
     suite = resolve_observed_time_suite(summary)
     if suite is None or summary.empty:
         return []
 
-    model_styles = {
-        "TOPSIS": {"color": "#7a7a7a", "marker": "o", "linewidth": 1.8},
-        "TemporalHMM": {"color": "#c17c32", "marker": "s", "linewidth": 1.8},
-        "TemporalLSTM": {"color": "#4c8c68", "marker": "^", "linewidth": 2.0},
-        "TemporalGRU": {"color": "#3967a7", "marker": "D", "linewidth": 2.0},
-        "TemporalHGTAN": {"color": "#b04747", "marker": "o", "linewidth": 2.6},
-    }
+    model_styles = OBSERVATION_MODEL_STYLES
 
     ordered_rows = []
     for model in model_styles:
@@ -458,7 +1929,9 @@ def plot_observed_time_main_figure(summary: pd.DataFrame, out_dir: Path) -> list
                     "observed_len": observed_len,
                     "seconds": observed_len * frame_interval,
                     "Composite F1": 100.0 * comp["mean"],
+                    "Composite F1 SD": 100.0 * comp["std"],
                     "Threat temporal accuracy (%)": 100.0 * tacc["mean"],
+                    "Threat temporal accuracy SD": 100.0 * tacc["std"],
                     "Critical false alarm (%)": 100.0 * false_alarm["mean"],
                 }
             )
@@ -467,66 +1940,62 @@ def plot_observed_time_main_figure(summary: pd.DataFrame, out_dir: Path) -> list
         return []
 
     plot_df = pd.DataFrame(ordered_rows).sort_values(["observed_len", "Model"])
+    plot_df.to_csv(out_dir / "fig_observed_time_source.csv", index=False)
     metric_specs = [
-        ("Composite F1", False, "fig_observed_time_composite_f1.pdf"),
-        ("Threat temporal accuracy (%)", False, "fig_observed_time_dynamic_accuracy.pdf"),
-        ("Critical false alarm (%)", True, "fig_observed_time_false_alarm.pdf"),
+        ("Composite F1", "Composite F1 SD", "fig_observed_time_composite_f1.pdf"),
+        ("Threat temporal accuracy (%)", "Threat temporal accuracy SD", "fig_observed_time_dynamic_accuracy.pdf"),
     ]
     written: list[Path] = []
-    for column, lower_better, filename in metric_specs:
-        fig, ax = new_panel_figure(width=3.65, height=2.55)
-        add_observed_time_regions(ax)
-        label_entries: list[dict[str, object]] = []
+    for column, spread_column, filename in metric_specs:
+        fig, ax = new_panel_figure(width=3.55, height=2.35, journal=True)
         for model, style in model_styles.items():
             sub = plot_df[plot_df["Model"] == model]
             if sub.empty:
                 continue
-            ax.plot(
+            ax.errorbar(
                 sub["seconds"],
                 sub[column],
+                yerr=sub[spread_column],
                 label=pretty_model_name(model),
                 color=style["color"],
-                marker=style["marker"],
+                fmt=style["marker"],
+                linestyle=style["linestyle"],
                 linewidth=style["linewidth"],
-                markersize=4.4,
+                markersize=style["markersize"],
+                markerfacecolor=style["color"] if model == "TemporalHGTAN" else "white",
+                markeredgecolor=style["color"],
+                markeredgewidth=0.7,
+                elinewidth=0.65,
+                capsize=1.6,
+                alpha=style["alpha"],
+                zorder=style["zorder"],
             )
-            end_x = float(sub["seconds"].iloc[-1])
-            end_y = float(sub[column].iloc[-1])
-            label_entries.append(
-                {
-                    "x": end_x,
-                    "y": end_y,
-                    "text": compact_model_name(model),
-                    "color": style["color"],
-                }
-            )
-        ax.set_xlabel("Observed time (s)")
+        ax.set_xlabel("Available history (s)")
         ax.set_xticks(sorted(plot_df["seconds"].unique()))
         x_min = float(plot_df["seconds"].min())
         x_max = float(plot_df["seconds"].max())
-        ax.set_xlim(x_min - 0.5, x_max + 4.1)
+        ax.set_xlim(x_min - 0.45, x_max + 0.45)
         if column == "Composite F1":
             ax.set_ylabel("Composite F1 (%)")
         elif column == "Threat temporal accuracy (%)":
             ax.set_ylabel("Threat temporal accuracy (%)")
         else:
             ax.set_ylabel("Critical false alarms (%)")
-        if column == "Composite F1":
-            ax.set_ylim(max(0.0, plot_df[column].min() - 3.0), min(100.0, plot_df[column].max() + 2.0))
-        elif column == "Threat temporal accuracy (%)":
-            ax.set_ylim(max(0.0, plot_df[column].min() - 3.0), min(100.0, plot_df[column].max() + 2.0))
-        else:
-            ax.axhline(0.0, color="#444444", linewidth=0.8, alpha=0.7)
-            ax.set_ylim(0.0, max(8.0, plot_df[column].max() + 4.0))
-        annotate_right_label_stack(
-            ax,
-            label_entries,
-            x_label=x_max + 0.82,
-            connector_gap=0.18,
-            fontsize=7.5,
-            min_gap_frac=0.075 if column == "Critical false alarm (%)" else 0.068,
+        lower = float((plot_df[column] - plot_df[spread_column]).min())
+        upper = float((plot_df[column] + plot_df[spread_column]).max())
+        pad = max(0.45, 0.04 * (upper - lower))
+        ax.set_ylim(max(0.0, lower - pad), min(100.0, upper + pad))
+        ax.legend(
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.01),
+            ncol=3,
+            frameon=False,
+            fontsize=6.2,
+            handlelength=1.35,
+            columnspacing=0.75,
+            borderaxespad=0.0,
         )
-        save(fig, out_dir / filename)
+        save(fig, out_dir / filename, top_pad=0.86)
         written.append(out_dir / filename)
     return written
 
@@ -536,13 +2005,7 @@ def plot_distance_degradation_figure(summary: pd.DataFrame, out_dir: Path) -> li
     if suite is None or summary.empty:
         return []
 
-    model_styles = {
-        "TOPSIS": {"color": "#7a7a7a", "marker": "o", "linewidth": 1.8},
-        "TemporalHMM": {"color": "#c17c32", "marker": "s", "linewidth": 1.8},
-        "TemporalGRU": {"color": "#3967a7", "marker": "D", "linewidth": 2.0},
-        "TemporalLSTM": {"color": "#4c8c68", "marker": "^", "linewidth": 2.0},
-        "TemporalHGTAN": {"color": "#b04747", "marker": "o", "linewidth": 2.6},
-    }
+    model_styles = ROBUSTNESS_MODEL_STYLES
 
     rows = []
     settings = sorted(summary[summary["source_suite"] == suite]["setting"].dropna().astype(str).unique())
@@ -566,7 +2029,9 @@ def plot_distance_degradation_figure(summary: pd.DataFrame, out_dir: Path) -> li
                     "Model": model,
                     "Range (m)": float(range_m),
                     "Composite F1": 100.0 * comp["mean"],
+                    "Composite F1 SD": 100.0 * comp["std"],
                     "Threat temporal accuracy (%)": 100.0 * tacc["mean"],
+                    "Threat temporal accuracy SD": 100.0 * tacc["std"],
                 }
             )
 
@@ -580,70 +2045,191 @@ def plot_distance_degradation_figure(summary: pd.DataFrame, out_dir: Path) -> li
         lambda row: float(baseline.get(row["Model"], row["Composite F1"]) - row["Composite F1"]),
         axis=1,
     )
+    plot_df.to_csv(out_dir / "fig_distance_degradation_source.csv", index=False)
     metric_specs = [
-        ("Composite F1", False, "fig_distance_degradation_composite_f1.pdf"),
-        ("Threat temporal accuracy (%)", False, "fig_distance_degradation_dynamic_accuracy.pdf"),
-        ("Composite F1 drop from 1000 m (pp)", True, "fig_distance_degradation_drop.pdf"),
+        ("Composite F1", "Composite F1 SD", "fig_distance_degradation_composite_f1.pdf"),
+        ("Threat temporal accuracy (%)", "Threat temporal accuracy SD", "fig_distance_degradation_dynamic_accuracy.pdf"),
     ]
     written: list[Path] = []
-    for panel_idx, (column, lower_better, filename) in enumerate(metric_specs):
-        fig, ax = new_panel_figure(width=3.65, height=2.55)
-        add_range_regions(ax)
-        label_entries: list[dict[str, object]] = []
+    for column, spread_column, filename in metric_specs:
+        fig, ax = new_panel_figure(width=3.55, height=2.35, journal=True)
         for model, style in model_styles.items():
             sub = plot_df[plot_df["Model"] == model]
             if sub.empty:
                 continue
-            ax.plot(
+            ax.errorbar(
                 sub["Range (m)"],
                 sub[column],
+                yerr=sub[spread_column],
                 label=pretty_model_name(model),
                 color=style["color"],
-                marker=style["marker"],
+                fmt=style["marker"],
+                linestyle=style["linestyle"],
                 linewidth=style["linewidth"],
-                markersize=4.4,
-            )
-            end_x = float(sub["Range (m)"].iloc[-1])
-            end_y = float(sub[column].iloc[-1])
-            label_entries.append(
-                {
-                    "x": end_x,
-                    "y": end_y,
-                    "text": compact_model_name(model),
-                    "color": style["color"],
-                }
+                markersize=style["markersize"],
+                markerfacecolor=style["color"] if model == "TemporalHGTAN" else "white",
+                markeredgecolor=style["color"],
+                markeredgewidth=0.7,
+                elinewidth=0.65,
+                capsize=1.6,
+                alpha=style["alpha"],
+                zorder=style["zorder"],
             )
         ax.set_xlabel("Nominal sensing range (m)")
         ax.set_xticks([1000.0, 3000.0, 5000.0])
         x_min = float(plot_df["Range (m)"].min())
         x_max = float(plot_df["Range (m)"].max())
-        ax.set_xlim(x_min - 120.0, x_max + 930.0)
+        ax.set_xlim(x_min - 100.0, x_max + 100.0)
         if column == "Composite F1":
             ax.set_ylabel("Composite F1 (%)")
         elif column == "Threat temporal accuracy (%)":
             ax.set_ylabel("Threat temporal accuracy (%)")
-        else:
-            ax.set_ylabel("F1 loss from 1000 m (pp)")
-        if column == "Composite F1 drop from 1000 m (pp)":
-            ax.axhline(0.0, color="#444444", linewidth=0.8, linestyle="--", alpha=0.75)
-            ax.set_ylim(min(-1.0, plot_df[column].min() - 0.5), max(2.0, plot_df[column].max() + 0.7))
-        else:
-            ax.set_ylim(max(45.0, plot_df[column].min() - 3.0), min(100.0, plot_df[column].max() + 2.0))
-        if panel_idx == 0:
-            secax = ax.secondary_xaxis("top", functions=(range_to_noise_multiplier, noise_multiplier_to_range))
-            secax.set_xlabel("Noise multiplier")
-            secax.set_xticks([1.0, 2.0, 3.0])
-            secax.tick_params(labelsize=8, pad=1)
-        annotate_right_label_stack(
-            ax,
-            label_entries,
-            x_label=x_max + 230.0,
-            connector_gap=45.0,
-            fontsize=7.5,
-            min_gap_frac=0.072,
+        lower = float((plot_df[column] - plot_df[spread_column]).min())
+        upper = float((plot_df[column] + plot_df[spread_column]).max())
+        pad = max(0.35, 0.04 * (upper - lower))
+        ax.set_ylim(max(0.0, lower - pad), min(100.0, upper + pad))
+        ax.legend(
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.01),
+            ncol=3,
+            frameon=False,
+            fontsize=6.2,
+            handlelength=1.35,
+            columnspacing=0.75,
+            borderaxespad=0.0,
         )
-        save(fig, out_dir / filename)
+        save(fig, out_dir / filename, top_pad=0.86)
         written.append(out_dir / filename)
+    return written
+
+
+def plot_missing_robustness_figures(summary: pd.DataFrame, out_dir: Path) -> list[Path]:
+    """Plot frozen-model performance under random and contiguous frame loss."""
+    suite = resolve_suite(summary, "missing")
+    if suite is None or summary.empty:
+        return []
+
+    records: list[dict[str, float | str]] = []
+    metric_specs = [
+        ("Composite F1 (%)", "joint", "composite_f1"),
+        ("Threat temporal macro-F1 (%)", "threat_track", "temporal_macro_f1"),
+    ]
+    suite_rows = summary[summary["source_suite"] == suite]
+    for mode in ["random", "burst"]:
+        for ratio in [0.0, 0.05, 0.10, 0.15, 0.20]:
+            setting_rows = suite_rows[
+                (suite_rows["test_missing_mode"] == mode)
+                & np.isclose(suite_rows["test_missing_ratio"].astype(float), ratio)
+            ]
+            if setting_rows.empty:
+                continue
+            setting_name = str(setting_rows.iloc[0]["setting"])
+            for model in MISSING_MODEL_STYLES:
+                for label, task, metric_name in metric_specs:
+                    result = metric(summary, suite, setting_name, model, task, metric_name)
+                    if result is None:
+                        continue
+                    records.append(
+                        {
+                            "Missingness mode": mode,
+                            "Missing-frame ratio (%)": 100.0 * ratio,
+                            "Model": model,
+                            "Model label": MISSING_MODEL_STYLES[model]["label"],
+                            "Metric": label,
+                            "Mean (%)": 100.0 * result["mean"],
+                            "SD": 100.0 * result["std"],
+                            "Source suite": suite,
+                            "Source setting": setting_name,
+                            "Seeds": 3,
+                            "Training corruption": "none",
+                        }
+                    )
+    if not records:
+        return []
+
+    source = pd.DataFrame(records)
+    source.to_csv(out_dir / "fig_missing_robustness_source.csv", index=False)
+
+    legend_fig = plt.figure(figsize=(7.05, 0.34))
+    legend_ax = legend_fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    legend_ax.axis("off")
+    legend_handles = [
+        Line2D(
+            [0], [0],
+            color=style["color"],
+            marker=style["marker"],
+            linestyle=style["linestyle"],
+            linewidth=style["linewidth"],
+            markersize=4.0,
+            markerfacecolor=style["color"] if model == "TemporalHGTAN" else "white",
+            markeredgecolor=style["color"],
+            markeredgewidth=0.7,
+            label=style["label"],
+        )
+        for model, style in MISSING_MODEL_STYLES.items()
+    ]
+    legend_ax.legend(
+        handles=legend_handles,
+        loc="center",
+        ncol=6,
+        frameon=True,
+        fancybox=False,
+        edgecolor="#777777",
+        facecolor="white",
+        framealpha=1.0,
+        fontsize=7.0,
+        handlelength=1.65,
+        handletextpad=0.42,
+        columnspacing=1.05,
+        borderpad=0.35,
+    )
+    legend_path = out_dir / "fig_missing_robustness_legend.pdf"
+    save(legend_fig, legend_path, tight=False)
+    written = [legend_path]
+
+    panel_specs = [
+        ("random", "Composite F1 (%)", "fig_missing_random_composite_f1.pdf"),
+        ("random", "Threat temporal macro-F1 (%)", "fig_missing_random_temporal_f1.pdf"),
+        ("burst", "Composite F1 (%)", "fig_missing_burst_composite_f1.pdf"),
+        ("burst", "Threat temporal macro-F1 (%)", "fig_missing_burst_temporal_f1.pdf"),
+    ]
+    for mode, metric_label, filename in panel_specs:
+        panel = source[(source["Missingness mode"] == mode) & (source["Metric"] == metric_label)]
+        if panel.empty:
+            continue
+        fig, ax = new_panel_figure(width=3.48, height=2.18, journal=True)
+        for model, style in MISSING_MODEL_STYLES.items():
+            sub = panel[panel["Model"] == model].sort_values("Missing-frame ratio (%)")
+            if sub.empty:
+                continue
+            ax.errorbar(
+                sub["Missing-frame ratio (%)"],
+                sub["Mean (%)"],
+                yerr=sub["SD"],
+                color=style["color"],
+                marker=style["marker"],
+                linestyle=style["linestyle"],
+                linewidth=style["linewidth"],
+                markersize=3.8 if model != "TemporalHGTAN" else 4.2,
+                markerfacecolor=style["color"] if model == "TemporalHGTAN" else "white",
+                markeredgecolor=style["color"],
+                markeredgewidth=0.70,
+                elinewidth=0.55,
+                capsize=1.35,
+                alpha=1.0,
+                zorder=style["zorder"],
+            )
+        ax.set_xlabel("Missing-frame ratio (%)")
+        ax.set_ylabel(metric_label)
+        ax.set_xticks([0, 5, 10, 15, 20])
+        ax.set_xlim(-0.6, 20.6)
+        lower = float((panel["Mean (%)"] - panel["SD"]).min())
+        upper = float((panel["Mean (%)"] + panel["SD"]).max())
+        pad = max(0.30, 0.045 * (upper - lower))
+        ax.set_ylim(max(0.0, lower - pad), min(100.0, upper + pad))
+        path = out_dir / filename
+        save(fig, path)
+        written.append(path)
     return written
 
 
@@ -850,204 +2436,221 @@ def plot_operational_case_composite(
     return path
 
 
-def plot_operational_case_figure(case: dict, out_dir: Path) -> list[Path]:
+def plot_operational_case_figure(
+    case: dict,
+    out_dir: Path,
+    *,
+    timeline_case: dict | None = None,
+) -> list[Path]:
     features = np.asarray(case.get("model_input_features", case.get("noisy_features", case["features"])), dtype=np.float64)
     clean_features = np.asarray(case.get("clean_features", features), dtype=np.float64)
     threat_true = np.asarray(case["threat_true"], dtype=np.int64)
     frame_interval = float(case.get("frame_interval", 0.2))
     time_axis = np.arange(len(threat_true)) * frame_interval
-    distance = clean_features[:, 8]
-    heading = clean_features[:, 6]
-    x_pos, y_pos = trajectory_proxy(distance, heading)
-    noisy_x, noisy_y = trajectory_proxy(features[:, 8], features[:, 6])
-    turn_idx = int(np.argmax(np.abs(np.diff(heading)))) + 1 if len(heading) > 1 else 0
 
     written: list[Path] = []
     model_curves = case.get("models", {})
     keep_models = [model for model in CURVE_MODELS if model in model_curves]
     true_first = first_critical(threat_true, [4, 5])
-    timing_rows = operational_timing_rows(case)
-    fig, ax = new_panel_figure(width=4.15, height=2.55)
-    ax.plot(x_pos, y_pos, marker="o", markersize=2.0, linewidth=2.0, color="#405d7d", label="Clean reference")
-    ax.scatter(noisy_x, noisy_y, s=13, color="#b45f4d", alpha=0.45, label="Observed samples")
-    ax.scatter(x_pos[0], y_pos[0], color="#6d9276", s=36, zorder=4, label="Start")
-    ax.scatter(x_pos[-1], y_pos[-1], color="#222222", s=42, zorder=4, label="Final")
-    if true_first >= 0:
-        ax.scatter(
-            x_pos[true_first],
-            y_pos[true_first],
-            marker="*",
-            color="#c44e52",
-            edgecolor="#222222",
-            linewidth=0.45,
-            s=95,
-            zorder=6,
-            label="Reference event",
-        )
-    ax.set_xlabel("Relative x")
-    ax.set_ylabel("Relative y")
-    ax.legend(fontsize=7, ncol=2, frameon=False, handlelength=1.2, columnspacing=0.8)
-    path = out_dir / "fig_operational_case_trajectory.pdf"
-    save(fig, path)
-    written.append(path)
+    source = pd.DataFrame(
+        {
+            "time_s": time_axis,
+            "clean_threat": threat_true,
+            "observed_heading": features[:, 6],
+            "clean_heading": clean_features[:, 6],
+            "observed_distance": features[:, 8],
+            "clean_distance": clean_features[:, 8],
+            "observed_time_to_arrival": features[:, 11],
+            "clean_time_to_arrival": clean_features[:, 11],
+        }
+    )
+    for model in keep_models:
+        source[f"{model}_threat"] = np.asarray(model_curves[model]["threat_pred"], dtype=np.int64)
+        source[f"{model}_critical"] = (
+            np.asarray(model_curves[model]["threat_pred"], dtype=np.int64) >= 4
+        ).astype(np.int64)
+    source["clean_critical"] = (threat_true >= 4).astype(np.int64)
+    source.to_csv(out_dir / "fig_operational_case_source.csv", index=False)
 
-    fig, ax = new_panel_figure(width=4.15, height=2.55)
-    signal_offsets = {
-        "Distance": (0.10, 0.03),
-        "Heading": (0.10, -0.02),
-        "Time-to-arrival": (0.10, -0.01),
-    }
-    for feature_name, feature_idx, color in [
-        ("Distance", 8, "#4d7fa8"),
-        ("Heading", 6, "#6d9276"),
-        ("Time-to-arrival", 11, "#b45f4d"),
+    fig, ax = new_panel_figure(width=3.55, height=2.15, journal=True)
+    for feature_name, feature_idx, color, linestyle in [
+        ("Distance", 8, "#303030", "-"),
+        ("Heading", 6, "#6f6f6f", "--"),
+        ("Time-to-arrival", 11, "#9a9a9a", "-."),
     ]:
-        ax.plot(time_axis, features[:, feature_idx], label=f"Observed {feature_name.lower()}", linewidth=1.9, color=color)
-        ax.plot(time_axis, clean_features[:, feature_idx], linewidth=1.1, color=color, alpha=0.40, linestyle="--")
-        dx, dy = signal_offsets.get(feature_name, (0.10, 0.0))
-        annotate_series_label(
-            ax,
-            x=float(time_axis[-1]),
-            y=float(features[-1, feature_idx]),
-            text=feature_name,
+        ax.plot(
+            time_axis,
+            features[:, feature_idx],
+            label=feature_name,
+            linewidth=1.10,
             color=color,
-            dx=dx,
-            dy=dy,
-            fontsize=7.6,
+            linestyle=linestyle,
+            zorder=3,
         )
     if true_first >= 0:
-        ax.axvline(time_axis[true_first], color="#444444", linewidth=1.0, linestyle="--")
+        ax.axvline(time_axis[true_first], color="#8f1d1d", linewidth=0.85, linestyle=":", zorder=1)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Normalized value")
-    ax.set_xlim(float(time_axis[0]) - 0.3, float(time_axis[-1]) + 0.95)
     ax.set_ylim(0, 1)
+    ax.set_xlim(float(time_axis[0]) - 0.2, float(time_axis[-1]) + 0.2)
+    ax.legend(
+        loc="upper right",
+        frameon=False,
+        fontsize=6.3,
+        ncol=1,
+        handlelength=1.8,
+        borderaxespad=0.25,
+    )
     path = out_dir / "fig_operational_case_signals.pdf"
     save(fig, path)
     written.append(path)
 
-    fig, ax = new_panel_figure(width=7.35, height=2.15)
-    ax.axhspan(4, 5.2, color="#b45f4d", alpha=0.09, label="Critical zone")
-    ax.step(time_axis, threat_true, where="post", label="Clean reference", linewidth=2.9, color="#222222", zorder=6)
-    curve_styles = {
-        "TOPSIS": {"color": "#3967a7", "linewidth": 1.35, "alpha": 0.58, "zorder": 2},
-        "TemporalHMM": {"color": "#dd8452", "linewidth": 1.85, "alpha": 0.95, "zorder": 3},
-        "TemporalGRU": {"color": "#4c72b0", "linewidth": 1.95, "alpha": 0.95, "zorder": 4},
-        "TemporalLSTM": {"color": "#55a868", "linewidth": 1.95, "alpha": 0.95, "zorder": 4},
-        "TemporalHGTAN": {"color": "#c44e52", "linewidth": 2.65, "alpha": 1.0, "zorder": 7},
-    }
-    for model in keep_models:
-        style = curve_styles.get(model, {"linewidth": 1.8, "alpha": 0.9, "zorder": 3})
-        ax.step(
-            time_axis,
-            model_curves[model]["threat_pred"],
-            where="post",
-            label=pretty_model_name(model),
-            linewidth=style.get("linewidth", 1.8),
-            color=style.get("color", None),
-            alpha=style.get("alpha", 0.9),
-            zorder=style.get("zorder", 3),
+    timeline_case = timeline_case or case
+    timeline_threat_true = np.asarray(timeline_case["threat_true"], dtype=np.int64)
+    timeline_frame_interval = float(timeline_case.get("frame_interval", 0.2))
+    timeline_time_axis = np.arange(len(timeline_threat_true)) * timeline_frame_interval
+    timeline_model_curves = timeline_case.get("models", {})
+    timeline_models = [model for model in CURVE_MODELS if model in timeline_model_curves]
+    timeline_true_first = first_critical(timeline_threat_true, [4, 5])
+    timing_rows = operational_timing_rows(timeline_case)
+    selection = timeline_case.get("selection", {})
+    timing_source = pd.DataFrame(timing_rows)
+    for key, value in selection.items():
+        timing_source[f"Selection {key.replace('_', ' ')}"] = value
+    timing_source.to_csv(out_dir / "fig_operational_case_timing_source.csv", index=False)
+
+    timeline_source = pd.DataFrame(
+        {
+            "time_s": timeline_time_axis,
+            "clean_threat": timeline_threat_true,
+            "clean_critical": (timeline_threat_true >= 4).astype(np.int64),
+        }
+    )
+    for model in timeline_models:
+        model_pred = np.asarray(timeline_model_curves[model]["threat_pred"], dtype=np.int64)
+        timeline_source[f"{model}_threat"] = model_pred
+        timeline_source[f"{model}_critical"] = (model_pred >= 4).astype(np.int64)
+    timeline_source.to_csv(out_dir / "fig_operational_case_timeline_source.csv", index=False)
+
+    timeline_rows: list[tuple[str, np.ndarray, str]] = [
+        ("Clean reference", timeline_threat_true >= 4, "#303030")
+    ]
+    for model in timeline_models:
+        style = OPERATIONAL_MODEL_STYLES.get(model, {})
+        timeline_rows.append(
+            (
+                pretty_model_name(model),
+                np.asarray(timeline_model_curves[model]["threat_pred"], dtype=np.int64) >= 4,
+                str(style.get("color", "#707070")),
+            )
         )
-    if true_first >= 0:
-        ax.axvline(time_axis[true_first], color="#444444", linewidth=1.0, linestyle="--")
+
+    def critical_intervals(mask: np.ndarray) -> list[tuple[float, float]]:
+        binary = np.asarray(mask, dtype=np.int8)
+        changes = np.diff(np.pad(binary, (1, 1), constant_values=0))
+        starts = np.flatnonzero(changes == 1)
+        stops = np.flatnonzero(changes == -1)
+        return [
+            (
+                float(start * timeline_frame_interval),
+                float((stop - start) * timeline_frame_interval),
+            )
+            for start, stop in zip(starts, stops)
+        ]
+
+    fig, ax = new_panel_figure(width=7.10, height=2.15, journal=True)
+    ax.grid(False)
+    ax.grid(axis="x", linewidth=0.42, color="#e3e3e3", alpha=0.85, zorder=0)
+    y_positions = np.arange(len(timeline_rows), dtype=float)
+    time_end = float(timeline_time_axis[-1] + timeline_frame_interval)
+    for y_pos, (label, critical_mask, color) in zip(y_positions, timeline_rows):
+        ax.hlines(y_pos, 0.0, time_end, color="#e0e0e0", linewidth=2.0, zorder=1)
+        intervals = critical_intervals(critical_mask)
+        if intervals:
+            ax.broken_barh(
+                intervals,
+                (y_pos - 0.18, 0.36),
+                facecolors=color,
+                edgecolors="none",
+                alpha=0.98,
+                zorder=3,
+            )
+            first_start = intervals[0][0]
+            ax.scatter(
+                first_start,
+                y_pos,
+                s=16,
+                facecolor=color,
+                edgecolor="white",
+                linewidth=0.45,
+                zorder=4,
+            )
+    if timeline_true_first >= 0:
+        event_time = float(timeline_time_axis[timeline_true_first])
+        ax.axvspan(event_time - 0.04, event_time + 0.04, color="#777777", alpha=0.30, linewidth=0, zorder=2)
+        ax.text(
+            event_time,
+            -0.62,
+            f"Reference {event_time:.1f} s",
+            ha="center",
+            va="bottom",
+            fontsize=6.8,
+            color="#555555",
+        )
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Threat level")
-    ax.set_yticks([1, 2, 3, 4, 5])
-    ax.set_ylim(0.8, 5.2)
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=6, frameon=False, borderaxespad=0.0, fontsize=7.4)
-    path = out_dir / "fig_operational_case_curves.pdf"
-    save(fig, path, top_pad=0.82)
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels([row[0] for row in timeline_rows], fontsize=7.1)
+    ax.set_ylim(len(timeline_rows) - 0.55, -0.78)
+    ax.set_xlim(0.0, time_end)
+    path = out_dir / "fig_operational_case_timeline.pdf"
+    save(fig, path)
     written.append(path)
 
     if timing_rows:
         timing_df = pd.DataFrame(timing_rows)
+        timing_df = timing_df[timing_df["Model"] != "Clean reference"].copy()
         y_positions = np.arange(len(timing_df))
 
-        fig, ax = new_panel_figure(width=7.35, height=1.80)
+        fig, ax = new_panel_figure(width=3.55, height=2.15, journal=True)
         ax.grid(False)
-        ax.axvspan(0.0, time_axis[true_first] if true_first >= 0 else 0.0, color="#b45f4d", alpha=0.08, label="Pre-critical interval")
+        ax.grid(axis="x", linewidth=0.42, color="#e5e5e5", alpha=0.85)
+        reference_time = float(time_axis[true_first]) if true_first >= 0 else float("nan")
         if true_first >= 0:
-            ax.axvline(time_axis[true_first], color="#222222", linewidth=1.2, linestyle="--", label="Reference critical event")
-        metric_x = float(time_axis[-1]) + 1.05
-        for y_pos_i, row in zip(y_positions, timing_rows):
+            ax.axvline(reference_time, color="#222222", linewidth=1.0, linestyle="--", zorder=5)
+        for y_pos_i, row in zip(y_positions, timing_df.to_dict("records")):
             alarm_t = row["Alarm time (s)"]
             model_name = str(row["Model"])
-            ax.hlines(y_pos_i, 0.0, time_axis[-1], color="#d8d8d8", linewidth=4.0, zorder=1)
             if np.isfinite(alarm_t):
-                if model_name == "Clean reference":
-                    color = "#222222"
-                    marker = "D"
-                    size = 48
-                else:
-                    color = OPERATIONAL_MODEL_STYLES.get(model_name, {}).get("color", "#405d7d")
-                    marker = "s" if row["False frames"] > 0 else "o"
-                    size = 56 if row["False frames"] > 0 else 50
-                ax.scatter(alarm_t, y_pos_i, s=size, color=color, marker=marker, edgecolor="#222222", linewidth=0.5, zorder=3)
-            metric_text = "-- / --" if model_name == "Clean reference" else f"{int(row['False frames'])} / {float(row['MAE']):.2f}"
-            ax.text(metric_x, y_pos_i, metric_text, ha="left", va="center", fontsize=7.0, color="#333333")
-        ax.text(metric_x, -0.55, "False / MAE", ha="left", va="bottom", fontsize=7.0, color="#333333")
+                color = OPERATIONAL_MODEL_STYLES.get(model_name, {}).get("color", "#405d7d")
+                marker = "o" if model_name == "TemporalHGTAN" else "s"
+                size = 34 if model_name == "TemporalHGTAN" else 27
+                if np.isfinite(reference_time):
+                    ax.hlines(
+                        y_pos_i,
+                        min(float(alarm_t), reference_time),
+                        max(float(alarm_t), reference_time),
+                        color="#8f8f8f" if model_name != "TemporalHGTAN" else color,
+                        linewidth=1.15 if model_name == "TemporalHGTAN" else 0.75,
+                        alpha=1.0,
+                        zorder=2,
+                    )
+                ax.scatter(
+                    alarm_t,
+                    y_pos_i,
+                    s=size,
+                    facecolor=color if model_name == "TemporalHGTAN" else "white",
+                    edgecolor=color,
+                    marker=marker,
+                    linewidth=0.75,
+                    zorder=4,
+                )
         ax.set_yticks(y_positions)
-        ax.set_yticklabels([pretty_model_name(name) if name != "Clean reference" else name for name in timing_df["Model"]])
-        ax.set_xlim(-0.35, time_axis[-1] + 2.1)
+        ax.set_yticklabels([compact_model_name(name) for name in timing_df["Model"]])
+        ax.set_xlim(float(time_axis[0]) - 0.2, float(time_axis[-1]) + 0.25)
         ax.set_xlabel("First critical-alarm time (s)")
         ax.invert_yaxis()
         path = out_dir / "fig_operational_case_alarm_timing.pdf"
-        fig.subplots_adjust(left=0.13, right=0.97, bottom=0.28, top=0.94, wspace=0.10)
-        save(fig, path, tight=False)
-        written.append(path)
-
-        trade_df = timing_df[timing_df["Model"] != "Clean reference"].copy()
-        fig, ax = new_panel_figure(width=4.25, height=3.05)
-        color_map = {
-            "TOPSIS": "#7a7a7a",
-            "TemporalHMM": "#c17c32",
-            "TemporalGRU": "#3967a7",
-            "TemporalLSTM": "#4c8c68",
-            "TemporalHGTAN": "#b04747",
-        }
-        text_offsets = {
-            "TOPSIS": (1.5, 0.20),
-            "TemporalHMM": (0.30, -0.25),
-            "TemporalGRU": (1.0, 0.08),
-            "TemporalLSTM": (1.5, -0.18),
-            "TemporalHGTAN": (0.30, 0.22),
-        }
-        for _, row in trade_df.iterrows():
-            model_name = str(row["Model"])
-            x_val = float(row["False frames"])
-            y_val = float(row["Lead time (s)"])
-            ax.scatter(
-                x_val,
-                y_val,
-                s=54,
-                color=color_map.get(model_name, "#405d7d"),
-                edgecolor="#222222",
-                linewidth=0.4,
-                zorder=3,
-            )
-            dx, dy = text_offsets.get(model_name, (0.5, 0.12))
-            ax.text(
-                x_val + dx,
-                y_val + dy,
-                pretty_model_name(model_name),
-                fontsize=7,
-                color="#333333",
-                bbox={"boxstyle": "round,pad=0.08", "facecolor": "white", "edgecolor": "none", "alpha": 0.78},
-            )
-        ax.axhline(0.0, color="#444444", linewidth=0.8, linestyle="--")
-        ax.axvline(0.0, color="#999999", linewidth=0.7, linestyle=":")
-        ax.axvspan(-0.2, 2.0, color="#6d9276", alpha=0.07, zorder=0)
-        ax.axvspan(20.0, 70.0, color="#b45f4d", alpha=0.06, zorder=0)
-        ax.set_xscale("symlog", linthresh=3.0, linscale=1.0)
-        ax.set_xlim(-0.6, max(60.0, float(trade_df["False frames"].max()) + 4.0))
-        ax.set_xticks([0, 1, 5, 10, 50])
-        ax.set_xticklabels(["0", "1", "5", "10", "50"])
-        y_min = float(trade_df["Lead time (s)"].min()) - 0.8
-        y_max = float(trade_df["Lead time (s)"].max()) + 0.8
-        ax.set_ylim(y_min, y_max)
-        ax.set_xlabel("Pre-critical false frames")
-        ax.set_ylabel("Lead time (+early, -late) (s)")
-        path = out_dir / "fig_operational_case_tradeoff.pdf"
-        save(fig, path)
+        save(fig, path, top_pad=0.88)
         written.append(path)
 
     return written
@@ -1098,7 +2701,35 @@ def read_operational_npz(path: Path) -> dict | None:
     cases = [case for case in cases if case is not None]
     if not cases:
         return None
-    return max(cases, key=score_operational_case)
+    return select_representative_operational_case(cases)
+
+
+def select_representative_operational_case(cases: list[dict]) -> dict:
+    """Select the median HGTAN-versus-GRU MAE gain rather than the best-looking case."""
+    ranked: list[tuple[float, dict]] = []
+    for case in cases:
+        models = case.get("models", {})
+        if "TemporalHGTAN" not in models or "TemporalGRU" not in models:
+            continue
+        threat_true = np.asarray(case["threat_true"], dtype=np.int64)
+        if first_critical(threat_true, [4, 5]) < 0:
+            continue
+        frame_interval = float(case.get("frame_interval", 0.2))
+        hgtan_stats = case_alarm_stats(
+            threat_true,
+            np.asarray(models["TemporalHGTAN"]["threat_pred"], dtype=np.int64),
+            frame_interval=frame_interval,
+        )
+        gru_stats = case_alarm_stats(
+            threat_true,
+            np.asarray(models["TemporalGRU"]["threat_pred"], dtype=np.int64),
+            frame_interval=frame_interval,
+        )
+        ranked.append((float(gru_stats["mae"] - hgtan_stats["mae"]), case))
+    if not ranked:
+        return sorted(cases, key=score_operational_case)[len(cases) // 2]
+    ranked.sort(key=lambda item: item[0])
+    return ranked[len(ranked) // 2][1]
 
 
 def build_operational_case_from_prefix(arrays: np.lib.npyio.NpzFile, prefix: str) -> dict | None:
@@ -1180,6 +2811,8 @@ def generate_protocol_case() -> dict:
         "track_missing_ratio": 0.10,
         "track_jitter_std": 0.015,
         "type_as_input": False,
+        "mission_as_input": False,
+        "reference_policy_variant": "balanced",
     }
     features, threat_seq, urgency_seq, metadata = generate_uav_track_sequences(
         n_tracks=256,
@@ -1369,7 +3002,39 @@ def resolve_suite(summary: pd.DataFrame, suffix: str) -> str | None:
     return None
 
 
+def resolve_suite_containing(summary: pd.DataFrame, tokens: tuple[str, ...]) -> str | None:
+    if summary.empty or "source_suite" not in summary.columns:
+        return None
+    sources = sorted(str(value) for value in summary["source_suite"].dropna().unique())
+    return next((source for source in sources if all(token in source for token in tokens)), None)
+
+
+def resolve_suite_excluding(
+    summary: pd.DataFrame,
+    token: str,
+    *,
+    excluded: tuple[str, ...],
+) -> str | None:
+    if summary.empty or "source_suite" not in summary.columns:
+        return None
+    sources = sorted(str(value) for value in summary["source_suite"].dropna().unique())
+    return next(
+        (
+            source
+            for source in sources
+            if token in source and not any(blocked in source for blocked in excluded)
+        ),
+        None,
+    )
+
+
 def resolve_observed_time_suite(summary: pd.DataFrame) -> str | None:
+    suite = resolve_suite_containing(summary, ("fixed_endpoint", "window"))
+    if suite is not None:
+        return suite
+    suite = resolve_suite_containing(summary, ("fixed_endpoint", "observed"))
+    if suite is not None:
+        return suite
     suite = resolve_suite(summary, "observed_time")
     if suite is not None:
         return suite
@@ -1497,6 +3162,7 @@ def metric(
     row = match.iloc[0]
     return {
         "mean": float(row["mean"]),
+        "std": float(row["std"]) if "std" in row and pd.notna(row["std"]) else 0.0,
         "ci95": float(row["ci95"]) if "ci95" in row and pd.notna(row["ci95"]) else 0.0,
     }
 
@@ -1508,6 +3174,8 @@ def save(fig: plt.Figure, path: Path, *, top_pad: float | None = None, tight: bo
         else:
             fig.tight_layout(rect=(0.0, 0.0, 1.0, top_pad))
     fig.savefig(path, format="pdf", bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(path.with_suffix(".svg"), format="svg", bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(path.with_suffix(".png"), format="png", dpi=300, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
 
@@ -1539,10 +3207,9 @@ def write_layered_figure_snippets(paths: list[Path], paper_out_dir: Path, *, tex
 
 
 def clear_stale_outputs(out_dir: Path) -> None:
-    for path in out_dir.glob("fig_*.png"):
-        path.unlink(missing_ok=True)
-    for path in out_dir.glob("fig_*.pdf"):
-        path.unlink(missing_ok=True)
+    for pattern in ["fig_*.png", "fig_*.pdf", "fig_*.svg", "fig_*_source.csv"]:
+        for path in out_dir.glob(pattern):
+            path.unlink(missing_ok=True)
 
 
 def caption_for_stem(stem: str) -> str:
@@ -1554,17 +3221,25 @@ def caption_for_stem(stem: str) -> str:
         "fig_assessment_protocol_quantification": "Risk-oriented indicator quantification",
         "fig_assessment_protocol_tracks": "Representative clean and noisy trajectory prototypes",
         "fig_assessment_protocol_degradation": "Range-dependent observation degradation rule",
-        "fig_observed_time_composite_f1": "Observed-time sensitivity in composite F1",
-        "fig_observed_time_dynamic_accuracy": "Observed-time sensitivity in threat temporal accuracy",
-        "fig_observed_time_false_alarm": "Observed-time sensitivity in critical false-alarm rate",
+        "fig_overall_final_dynamic_tradeoff": "Final classification versus prefix-level dynamic fidelity",
+        "fig_stability_paired_delta": "Paired Composite-F1 differences over ten matched random seeds",
+        "fig_classwise_threat_f1": "Class-wise final threat F1 under the default protocol",
+        "fig_classwise_urgency_f1": "Class-wise final urgency F1 under the default protocol",
+        "fig_policy_paired_margins": "Paired HGTAN margins under three reference policies",
+        "fig_holdout_paired_margins": "Paired HGTAN margins under leave-one-scenario-family-out evaluation",
+        "fig_observed_time_composite_f1": "Fixed-endpoint history sensitivity in composite F1",
+        "fig_observed_time_dynamic_accuracy": "Fixed-endpoint history sensitivity in threat temporal accuracy",
         "fig_distance_degradation_composite_f1": "Range-degradation sensitivity in composite F1",
         "fig_distance_degradation_dynamic_accuracy": "Range-degradation sensitivity in threat temporal accuracy",
-        "fig_distance_degradation_drop": "Range-degradation sensitivity in composite-F1 loss from the 1000 m setting",
-        "fig_operational_case_trajectory": "Operational-case trajectory proxies",
+        "fig_ablation_default_composite_f1": "Default-condition composite F1 ablation",
+        "fig_ablation_fixed_summary_composite_f1": "Fixed-endpoint temporal-summary composite F1 control",
+        "fig_ablation_default_temporal_f1": "Default-condition temporal macro-F1 ablation",
+        "fig_ablation_fixed_summary_temporal_f1": "Fixed-endpoint temporal-summary temporal macro-F1 control",
+        "fig_event_timing_agreement": "First-critical-alarm agreement over clean-reference transition tracks",
+        "fig_event_aligned_disagreement": "Critical-decision disagreement aligned to the clean-reference transition",
         "fig_operational_case_signals": "Operational-case key signals",
-        "fig_operational_case_curves": "Operational-case dynamic threat curves",
+        "fig_operational_case_timeline": "Representative critical-decision timelines",
         "fig_operational_case_alarm_timing": "Operational-case first critical-alarm timing",
-        "fig_operational_case_tradeoff": "Operational-case early-warning and false-alarm tradeoff",
     }
     return captions.get(stem, stem.removeprefix("fig_").replace("_", " ").title())
 

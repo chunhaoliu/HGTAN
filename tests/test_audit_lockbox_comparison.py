@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.audit_lockbox_comparison import build_audit, paired_audit
+from scripts.audit_lockbox_comparison import build_audit, holm_adjust, paired_audit
 
 
 def test_paired_audit_reports_wins_and_effect_direction():
@@ -29,3 +29,12 @@ def test_build_audit_pairs_by_seed_not_row_order():
     )
     assert audit.loc[0, "mean_delta"] == pytest.approx(0.11)
     assert audit.loc[0, "wins"] == 2
+    assert audit.loc[0, "paired_t_holm_p"] == pytest.approx(audit.loc[0, "paired_t_p"])
+    assert audit.loc[0, "wilcoxon_holm_p"] == pytest.approx(audit.loc[0, "wilcoxon_p"])
+    assert audit.loc[0, "alternative"] == "two-sided"
+    assert audit.loc[0, "p_adjustment"] == "Holm"
+
+
+def test_holm_adjust_preserves_order_and_monotonicity():
+    adjusted = holm_adjust([0.04, 0.01, 0.02])
+    assert adjusted == pytest.approx([0.04, 0.03, 0.04])

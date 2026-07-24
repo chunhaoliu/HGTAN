@@ -18,6 +18,7 @@ from data import (
     build_feature_profile_rows,
     build_joint_train_kwargs,
     data_provider,
+    build_missing_test_bundle,
     resolve_class_weights,
     sequence_data_provider,
 )
@@ -95,6 +96,7 @@ TRACK_METRIC_NON_SUMMARY_FIELDS = {
     "missing_ratio",
     "seq_len",
     "observed_len",
+    "observation_window",
     "frame_interval",
     "track_noise_std",
     "range_m",
@@ -161,6 +163,9 @@ class Exp_Main:
         return global_rows
 
     def run_setting(self, setting: dict[str, Any]) -> list[dict[str, Any]]:
+        if setting.get("evaluation_mode") == "frozen_test_missing":
+            return self.run_frozen_missing_setting(setting)
+
         config = self._build_config(setting)
         seeds = get_run_seeds(config["run"])
         print_runtime(config)
@@ -210,6 +215,70 @@ class Exp_Main:
         print(f"  Saved: {setting_dir}")
         return summary_rows
 
+    def run_frozen_missing_setting(self, setting: dict[str, Any]) -> list[dict[str, Any]]:
+        """Train each model once per seed and evaluate fixed test corruptions."""
+        config = self._build_config(setting)
+        seeds = get_run_seeds(config["run"])
+        print_runtime(config)
+        base_name = make_setting_name(setting)
+        base_dir = self.options.out_root / base_name
+        condition_specs = build_missing_condition_specs(setting)
+        expected_conditions = {spec["setting_name"] for spec in condition_specs}
+        records_by_condition: dict[str, list[dict[str, Any]]] = {
+            spec["setting_name"]: [] for spec in condition_specs
+        }
+
+        checkpoint_dir = base_dir / "seed_checkpoints"
+        for run_idx, seed in enumerate(seeds):
+            print(f"  Frozen-model run {run_idx + 1}/{len(seeds)} | seed={seed}")
+            checkpoint_path = checkpoint_dir / f"run_{run_idx:02d}_seed_{seed}.json.gz"
+            checkpoint = load_missing_checkpoint(
+                checkpoint_path,
+                expected_models=self.options.models,
+                expected_conditions=expected_conditions,
+                expected_seed=seed,
+                expected_run_index=run_idx,
+            ) if self.options.skip_existing else None
+            if checkpoint is None:
+                checkpoint = run_frozen_missing_seed(
+                    setting=setting,
+                    config=config,
+                    selected_models=self.options.models,
+                    seed=seed,
+                    run_idx=run_idx,
+                    condition_specs=condition_specs,
+                )
+                write_json_gzip(checkpoint_path, checkpoint)
+                print(f"    Checkpointed frozen-model seed: {checkpoint_path.name}")
+            else:
+                print(f"    Reused frozen-model seed checkpoint: {checkpoint_path.name}")
+
+            for condition_name, record in checkpoint["conditions"].items():
+                records_by_condition[condition_name].append(record)
+
+        global_rows: list[dict[str, Any]] = []
+        for spec in condition_specs:
+            condition_name = spec["setting_name"]
+            records = records_by_condition[condition_name]
+            summary_rows = annotate_summary_rows(
+                summarize_results(records),
+                condition_name,
+                spec,
+            )
+            write_setting_outputs(
+                setting_dir=self.options.out_root / condition_name,
+                setting_name=condition_name,
+                setting=spec,
+                model_names=self.options.models,
+                records=records,
+                summary_rows=summary_rows,
+                config=config,
+                cli_args=self.options.cli_args,
+            )
+            global_rows.extend(summary_rows)
+        print(f"  Saved frozen-model missingness sweep: {base_dir}")
+        return global_rows
+
     def write_manifest(self) -> None:
         manifest = {
             "suite": self.options.suite,
@@ -256,6 +325,208 @@ def run_sequence_single_seed(
 ) -> dict[str, Any]:
     """Run one sequential seed through the shared execution skeleton."""
     return run_seed_record(setting, config, selected_models, seed, run_idx, setting_name)
+
+
+def build_missing_condition_specs(setting: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand one frozen-training setting into deterministic test conditions."""
+    modes = [str(mode) for mode in setting.get("test_missing_modes", ["random", "burst"])]
+    rates = [float(rate) for rate in setting.get("test_missing_rates", [0.0, 0.05, 0.10, 0.15, 0.20])]
+    if any(mode not in {"random", "burst"} for mode in modes):
+        raise ValueError(f"Unsupported test missingness mode list: {modes}.")
+    if any(rate < 0.0 or rate >= 1.0 for rate in rates):
+        raise ValueError(f"Test missingness rates must lie in [0, 1): {rates}.")
+
+    specs = []
+    for mode in modes:
+        for rate in rates:
+            spec = setting.copy()
+            spec["setting_name"] = (
+                f"ATUAV-Core__latent_state_masked__test_missing_{mode}_{int(round(100 * rate)):02d}"
+            )
+            spec["test_missing_mode"] = mode
+            spec["test_missing_ratio"] = rate
+            specs.append(spec)
+    return specs
+
+
+def missing_mask_seed(seed: int, mode: str, ratio: float) -> int:
+    """Return a stable condition seed shared by every model in one run."""
+    mode_offset = 0 if mode == "random" else 10_000
+    return int(seed + 100_000 + mode_offset + round(ratio * 10_000))
+
+
+def load_missing_checkpoint(
+    path: Path,
+    *,
+    expected_models: list[str],
+    expected_conditions: set[str],
+    expected_seed: int,
+    expected_run_index: int,
+) -> dict[str, Any] | None:
+    """Return a complete frozen-model sweep checkpoint when identities match."""
+    if not path.exists():
+        return None
+    try:
+        checkpoint = read_json_gzip(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+    if checkpoint.get("seed") != expected_seed or checkpoint.get("run_index") != expected_run_index:
+        return None
+    conditions = checkpoint.get("conditions", {})
+    if set(conditions) != expected_conditions:
+        return None
+    for record in conditions.values():
+        if not set(expected_models).issubset(record.get("results", {})):
+            return None
+    return checkpoint
+
+
+def run_frozen_missing_seed(
+    *,
+    setting: dict[str, Any],
+    config: dict[str, Any],
+    selected_models: list[str],
+    seed: int,
+    run_idx: int,
+    condition_specs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Train once on the default split, then evaluate all missingness views."""
+    sequence_models = get_selected_sequential_models(selected_models)
+    if sequence_models != selected_models:
+        unsupported = [name for name in selected_models if name not in sequence_models]
+        raise ValueError(
+            "Frozen missingness evaluation supports trainable sequential models only; "
+            f"unsupported: {', '.join(unsupported)}"
+        )
+
+    set_random_seed(seed, config)
+    base_bundle = sequence_data_provider(config, seed).copy()
+    condition_views: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+    condition_records: dict[str, dict[str, Any]] = {}
+    confidence_decay = float(setting.get("test_confidence_decay", 0.65))
+    for spec in condition_specs:
+        condition_name = spec["setting_name"]
+        mode = str(spec["test_missing_mode"])
+        ratio = float(spec["test_missing_ratio"])
+        mask_seed = missing_mask_seed(seed, mode, ratio)
+        view = build_missing_test_bundle(
+            base_bundle,
+            config,
+            ratio=ratio,
+            mode=mode,
+            mask_seed=mask_seed,
+            confidence_decay=confidence_decay,
+        )
+        seeded_spec = spec.copy()
+        seeded_spec["test_missing_realized_ratio"] = view["test_missing_realized_ratio"]
+        seeded_spec["test_missing_mask_seed"] = mask_seed
+        condition_views[condition_name] = (seeded_spec, view)
+        condition_records[condition_name] = {
+            "assessment_setting": build_assessment_setting_record(seeded_spec),
+            "run_index": run_idx,
+            "seed": seed,
+            "split_strategy": base_bundle["split_strategy"],
+            "results": {},
+            "efficiency": {},
+            "predictions": {},
+            "training": {},
+            "track_metrics": [],
+            "missingness": {
+                "mode": mode,
+                "requested_ratio": ratio,
+                "realized_ratio": view["test_missing_realized_ratio"],
+                "mask_seed": mask_seed,
+                "confidence_decay": confidence_decay,
+                "training_corruption": "none",
+            },
+        }
+
+    for model_name in sequence_models:
+        set_random_seed(seed, config)
+        print(f"    Training {model_name} once for frozen missingness evaluation ...")
+        _, base_efficiency, _, trained_model, training = fit_trainable_model(
+            model_name,
+            base_bundle,
+            config,
+        )
+        for condition_name, (seeded_spec, view) in condition_views.items():
+            results, track_rows = evaluate_frozen_sequence_model(
+                model_name=model_name,
+                trained_model=trained_model,
+                data_bundle=view,
+                config=config,
+                setting=seeded_spec,
+                setting_name=condition_name,
+                run_idx=run_idx,
+                seed=seed,
+            )
+            record = condition_records[condition_name]
+            record["results"][model_name] = results
+            record["track_metrics"].extend(track_rows)
+            if float(seeded_spec["test_missing_ratio"]) == 0.0 and seeded_spec["test_missing_mode"] == "random":
+                record["efficiency"][model_name] = base_efficiency
+                record["training"][model_name] = training
+        release_runtime_cache()
+
+    return {
+        "run_index": run_idx,
+        "seed": seed,
+        "models": sequence_models,
+        "conditions": condition_records,
+    }
+
+
+def evaluate_frozen_sequence_model(
+    *,
+    model_name: str,
+    trained_model: Any,
+    data_bundle: dict[str, Any],
+    config: dict[str, Any],
+    setting: dict[str, Any],
+    setting_name: str,
+    run_idx: int,
+    seed: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Evaluate one fixed model on one precomputed test corruption view."""
+    use_amp = config["train"].get("use_amp", False)
+    threat_metrics, urgency_metrics, threat_pred_0, urgency_pred_0 = evaluate_model(
+        trained_model,
+        data_bundle["test_loader"],
+        use_amp=use_amp,
+    )
+    threat_seq_pred, urgency_seq_pred = predict_prefix_labels(
+        trained_model,
+        data_bundle["X_test"],
+        batch_size=_loader_batch_size(
+            data_bundle["test_loader"],
+            fallback=config["train"]["batch_size"],
+        ),
+        use_amp=use_amp,
+    )
+    predictions = build_prediction_payload(
+        data_bundle["t_test"],
+        data_bundle["u_test"],
+        np.asarray(threat_pred_0, dtype=np.int64) + 1,
+        np.asarray(urgency_pred_0, dtype=np.int64) + 1,
+    )
+    predictions.update(
+        {
+            "threat_seq_true": data_bundle["threat_seq_test"],
+            "threat_seq_pred": threat_seq_pred,
+            "urgency_seq_true": data_bundle["urgency_seq_test"],
+            "urgency_seq_pred": urgency_seq_pred,
+        }
+    )
+    track_rows = build_track_metric_rows(
+        model_name=model_name,
+        predictions=predictions,
+        setting=setting,
+        setting_name=setting_name,
+        run_idx=run_idx,
+        seed=seed,
+        frame_interval=config["sequence"].get("frame_interval", 1.0),
+    )
+    return {"threat": threat_metrics, "urgency": urgency_metrics}, track_rows
 
 
 def run_seed_record(
@@ -317,6 +588,9 @@ def run_seed_record(
             {
                 "seq_len": data_bundle["seq_len"],
                 "observed_len": data_bundle["observed_len"],
+                "observation_window": data_bundle["observation_window"],
+                "observation_start_step": data_bundle["observation_start_step"],
+                "observation_end_step": data_bundle["observation_end_step"],
                 "track_metrics": to_serializable(execution["track_metric_rows"]),
                 "operational_case": to_serializable(
                     build_operational_case_record(
@@ -462,9 +736,14 @@ def build_assessment_setting_record(setting: dict[str, Any]) -> dict[str, Any]:
         record["task_form"] = SEQUENTIAL_TASK_FORM
     for key in [
         "split_strategy",
+        "observation_window",
         "reference_policy_variant",
         "scenario_holdout_key",
         "scenario_holdout_value",
+        "test_missing_mode",
+        "test_missing_ratio",
+        "test_missing_realized_ratio",
+        "test_missing_mask_seed",
     ]:
         if key in setting:
             record[key] = setting[key]
@@ -1037,6 +1316,7 @@ def build_operational_case_record(
 
     metadata = data_bundle.get("metadata_test", {})
     observed_len = int(data_bundle.get("observed_len", threat_true.shape[1]))
+    observation_start_step = int(data_bundle.get("observation_start_step", 0))
     frame_interval = float(setting.get("frame_interval", 0.2))
     scored_candidates: list[tuple[float, int, dict[str, Any]]] = []
     for candidate_index in candidates.tolist():
@@ -1048,8 +1328,20 @@ def build_operational_case_record(
                 "threat_pred": np.asarray(payload["threat_seq_pred"])[candidate_index],
                 "urgency_pred": np.asarray(payload["urgency_seq_pred"])[candidate_index],
             }
-        clean_features = _case_sequence(metadata, "clean_sequence", candidate_index, observed_len)
-        noisy_features = _case_sequence(metadata, "noisy_sequence", candidate_index, observed_len)
+        clean_features = _case_sequence(
+            metadata,
+            "clean_sequence",
+            candidate_index,
+            observed_len,
+            start_step=observation_start_step,
+        )
+        noisy_features = _case_sequence(
+            metadata,
+            "noisy_sequence",
+            candidate_index,
+            observed_len,
+            start_step=observation_start_step,
+        )
         score = _score_operational_case_candidate(
             threat_true=np.asarray(threat_true[candidate_index], dtype=np.int64),
             model_curves=model_curves,
@@ -1081,9 +1373,27 @@ def build_operational_case_record(
         "true_first_critical_frame": _first_critical_frame(threat_true[case_index], critical_labels=[4, 5]),
         "urgency_first_immediate_frame": _first_critical_frame(urgency_true[case_index], critical_labels=[3]),
         "features": np.asarray(data_bundle["X_test"])[case_index],
-        "clean_features": _case_sequence(metadata, "clean_sequence", case_index, observed_len),
-        "noisy_features": _case_sequence(metadata, "noisy_sequence", case_index, observed_len),
-        "model_input_features": _case_sequence(metadata, "model_input_sequence", case_index, observed_len),
+        "clean_features": _case_sequence(
+            metadata,
+            "clean_sequence",
+            case_index,
+            observed_len,
+            start_step=observation_start_step,
+        ),
+        "noisy_features": _case_sequence(
+            metadata,
+            "noisy_sequence",
+            case_index,
+            observed_len,
+            start_step=observation_start_step,
+        ),
+        "model_input_features": _case_sequence(
+            metadata,
+            "model_input_sequence",
+            case_index,
+            observed_len,
+            start_step=observation_start_step,
+        ),
         "threat_true": threat_true[case_index],
         "urgency_true": urgency_true[case_index],
         "metadata": metadata_row,
@@ -1098,10 +1408,18 @@ def _first_critical_frame(sequence: np.ndarray, *, critical_labels: list[int]) -
     return int(np.argmax(mask))
 
 
-def _case_sequence(metadata: dict[str, Any], key: str, case_index: int, observed_len: int) -> np.ndarray:
+def _case_sequence(
+    metadata: dict[str, Any],
+    key: str,
+    case_index: int,
+    observed_len: int,
+    *,
+    start_step: int = 0,
+) -> np.ndarray:
     values = metadata.get(key)
     if isinstance(values, np.ndarray) and values.ndim == 3 and len(values) > case_index:
-        return np.asarray(values[case_index, :observed_len, :], dtype=np.float32)
+        end_step = start_step + observed_len
+        return np.asarray(values[case_index, start_step:end_step, :], dtype=np.float32)
     return np.empty((0, 0), dtype=np.float32)
 
 

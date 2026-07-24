@@ -332,6 +332,7 @@ class HGTANConfig:
     SEQUENCE = {
         "seq_len": 64,
         "observed_len": 64,
+        "observation_window": "prefix",
         "frame_interval": 0.2,
         "track_noise_std": 0.015,
         "range_m": 1000,

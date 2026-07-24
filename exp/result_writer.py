@@ -56,6 +56,8 @@ def build_run_metric_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]
             "reference_policy_variant": setting.get("reference_policy_variant"),
             "scenario_holdout_key": setting.get("scenario_holdout_key"),
             "scenario_holdout_value": setting.get("scenario_holdout_value"),
+            "test_missing_mode": setting.get("test_missing_mode"),
+            "test_missing_ratio": setting.get("test_missing_ratio"),
             "run_index": record.get("run_index"),
             "seed": record.get("seed"),
         }
@@ -84,6 +86,8 @@ def build_training_rows(records: list[dict[str, Any]]) -> tuple[list[dict[str, A
             "reference_policy_variant": setting.get("reference_policy_variant"),
             "scenario_holdout_key": setting.get("scenario_holdout_key"),
             "scenario_holdout_value": setting.get("scenario_holdout_value"),
+            "test_missing_mode": setting.get("test_missing_mode"),
+            "test_missing_ratio": setting.get("test_missing_ratio"),
             "run_index": record.get("run_index"),
             "seed": record.get("seed"),
         }
@@ -148,6 +152,7 @@ def _flatten_track_metric_row(common: dict[str, Any], track_row: dict[str, Any])
         "missing_ratio",
         "seq_len",
         "observed_len",
+        "observation_window",
         "frame_interval",
         "track_noise_std",
         "range_m",
@@ -158,6 +163,10 @@ def _flatten_track_metric_row(common: dict[str, Any], track_row: dict[str, Any])
         "reference_policy_variant",
         "scenario_holdout_key",
         "scenario_holdout_value",
+        "test_missing_mode",
+        "test_missing_ratio",
+        "test_missing_realized_ratio",
+        "test_missing_mask_seed",
         "run_index",
         "seed",
         "model",
@@ -177,6 +186,8 @@ def _flatten_track_metric_row(common: dict[str, Any], track_row: dict[str, Any])
         ),
         "scenario_holdout_key": track_row.get("scenario_holdout_key", common.get("scenario_holdout_key")),
         "scenario_holdout_value": track_row.get("scenario_holdout_value", common.get("scenario_holdout_value")),
+        "test_missing_mode": track_row.get("test_missing_mode", common.get("test_missing_mode")),
+        "test_missing_ratio": track_row.get("test_missing_ratio", common.get("test_missing_ratio")),
         "run_index": track_row.get("run_index", common.get("run_index")),
         "seed": track_row.get("seed", common.get("seed")),
     }
@@ -265,6 +276,7 @@ def setting_context(setting_name: str, setting: dict[str, Any]) -> dict[str, Any
     for key in [
         "seq_len",
         "observed_len",
+        "observation_window",
         "frame_interval",
         "track_noise_std",
         "range_m",
@@ -277,6 +289,10 @@ def setting_context(setting_name: str, setting: dict[str, Any]) -> dict[str, Any
         "reference_policy_variant",
         "scenario_holdout_key",
         "scenario_holdout_value",
+        "test_missing_mode",
+        "test_missing_ratio",
+        "test_missing_realized_ratio",
+        "test_missing_mask_seed",
     ]:
         if key in setting:
             context[key] = setting[key]

@@ -11,6 +11,19 @@ import pandas as pd
 from scipy.stats import ttest_rel, wilcoxon
 
 
+def holm_adjust(p_values: list[float]) -> list[float]:
+    """Return Holm-adjusted p-values in the original comparison order."""
+    order = np.argsort(p_values)
+    adjusted = np.empty(len(p_values), dtype=np.float64)
+    running = 0.0
+    total = len(p_values)
+    for rank, index in enumerate(order):
+        value = min((total - rank) * float(p_values[index]), 1.0)
+        running = max(running, value)
+        adjusted[index] = running
+    return adjusted.tolist()
+
+
 def paired_audit(primary: np.ndarray, baseline: np.ndarray) -> dict[str, float | int | None]:
     primary = np.asarray(primary, dtype=float)
     baseline = np.asarray(baseline, dtype=float)
@@ -20,7 +33,8 @@ def paired_audit(primary: np.ndarray, baseline: np.ndarray) -> dict[str, float |
     std = float(delta.std(ddof=1)) if len(delta) > 1 else 0.0
     t_result = ttest_rel(primary, baseline)
     try:
-        w_result = wilcoxon(delta, alternative="two-sided")
+        method = "exact" if not np.any(delta == 0) else "auto"
+        w_result = wilcoxon(delta, alternative="two-sided", method=method)
         wilcoxon_p = float(w_result.pvalue)
     except ValueError:
         wilcoxon_p = None
@@ -64,7 +78,13 @@ def build_audit(
                 **paired_audit(paired[primary_model].to_numpy(), paired[baseline].to_numpy()),
             }
         )
-    return pd.DataFrame(rows)
+    audit = pd.DataFrame(rows)
+    audit["paired_t_holm_p"] = holm_adjust(audit["paired_t_p"].astype(float).tolist())
+    wilcoxon_values = [1.0 if value is None else float(value) for value in audit["wilcoxon_p"]]
+    audit["wilcoxon_holm_p"] = holm_adjust(wilcoxon_values)
+    audit["alternative"] = "two-sided"
+    audit["p_adjustment"] = "Holm"
+    return audit
 
 
 def parse_args() -> argparse.Namespace:

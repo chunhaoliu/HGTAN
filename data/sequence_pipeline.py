@@ -44,6 +44,7 @@ def prepare_sequence_data(
     sequence_cfg = config["sequence"]
     seq_len = sequence_cfg["seq_len"]
     observed_len = min(sequence_cfg.get("observed_len", seq_len), seq_len)
+    observation_window = sequence_cfg.get("observation_window", "prefix")
 
     payload = generate_uav_track_payload(
         n_tracks=data_cfg["n_samples"],
@@ -60,10 +61,21 @@ def prepare_sequence_data(
     urgency_seq = np.asarray(payload["urgency_seq"])
     metadata = dict(payload["metadata"])
 
-    final_step = observed_len - 1
-    observed_sequences = sequences[:, :observed_len, :]
-    threat_labels = threat_seq[:, final_step]
-    urgency_labels = urgency_seq[:, final_step]
+    (
+        observed_sequences,
+        observed_threat_seq,
+        observed_urgency_seq,
+        observation_start_step,
+        observation_end_step,
+    ) = select_observation_window(
+        sequences,
+        threat_seq,
+        urgency_seq,
+        observed_len=observed_len,
+        observation_window=observation_window,
+    )
+    threat_labels = observed_threat_seq[:, -1]
+    urgency_labels = observed_urgency_seq[:, -1]
     selected_split = split_strategy or data_cfg.get("split_strategy", "stratified")
 
     train_idx, val_idx, test_idx = _build_sequence_split_indices(
@@ -75,8 +87,10 @@ def prepare_sequence_data(
         split_strategy=selected_split,
     )
 
-    x_train, x_val, x_test = observed_sequences[train_idx], observed_sequences[val_idx], observed_sequences[test_idx]
-    x_train, x_val, x_test, scaler = _scale_sequences(x_train, x_val, x_test)
+    x_train_raw = observed_sequences[train_idx].astype(np.float32, copy=True)
+    x_val_raw = observed_sequences[val_idx].astype(np.float32, copy=True)
+    x_test_raw = observed_sequences[test_idx].astype(np.float32, copy=True)
+    x_train, x_val, x_test, scaler = _scale_sequences(x_train_raw, x_val_raw, x_test_raw)
 
     t_train, t_val, t_test = threat_labels[train_idx], threat_labels[val_idx], threat_labels[test_idx]
     u_train, u_val, u_test = urgency_labels[train_idx], urgency_labels[val_idx], urgency_labels[test_idx]
@@ -90,6 +104,9 @@ def prepare_sequence_data(
         "X_train": x_train,
         "X_val": x_val,
         "X_test": x_test,
+        "X_train_raw": x_train_raw,
+        "X_val_raw": x_val_raw,
+        "X_test_raw": x_test_raw,
         "t_train": t_train,
         "t_val": t_val,
         "t_test": t_test,
@@ -102,12 +119,12 @@ def prepare_sequence_data(
         "u_train_0": u_train_0,
         "u_val_0": u_val_0,
         "u_test_0": u_test_0,
-        "threat_seq_train": threat_seq[train_idx, :observed_len],
-        "threat_seq_val": threat_seq[val_idx, :observed_len],
-        "threat_seq_test": threat_seq[test_idx, :observed_len],
-        "urgency_seq_train": urgency_seq[train_idx, :observed_len],
-        "urgency_seq_val": urgency_seq[val_idx, :observed_len],
-        "urgency_seq_test": urgency_seq[test_idx, :observed_len],
+        "threat_seq_train": observed_threat_seq[train_idx],
+        "threat_seq_val": observed_threat_seq[val_idx],
+        "threat_seq_test": observed_threat_seq[test_idx],
+        "urgency_seq_train": observed_urgency_seq[train_idx],
+        "urgency_seq_val": observed_urgency_seq[val_idx],
+        "urgency_seq_test": observed_urgency_seq[test_idx],
         "metadata_train": slice_metadata(metadata, train_idx),
         "metadata_val": slice_metadata(metadata, val_idx),
         "metadata_test": slice_metadata(metadata, test_idx),
@@ -115,8 +132,43 @@ def prepare_sequence_data(
         "scaler": scaler,
         "seq_len": seq_len,
         "observed_len": observed_len,
+        "observation_window": observation_window,
+        "observation_start_step": observation_start_step,
+        "observation_end_step": observation_end_step,
         "task_form": "sequential",
     }
+
+
+def select_observation_window(
+    sequences: np.ndarray,
+    threat_seq: np.ndarray,
+    urgency_seq: np.ndarray,
+    *,
+    observed_len: int,
+    observation_window: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, int]:
+    """Select a prefix or fixed-endpoint tail window from aligned tracks."""
+    if sequences.ndim != 3 or threat_seq.ndim != 2 or urgency_seq.ndim != 2:
+        raise ValueError("Expected sequences (N,T,F) and aligned label arrays (N,T).")
+    if sequences.shape[:2] != threat_seq.shape or threat_seq.shape != urgency_seq.shape:
+        raise ValueError("Sequence and label arrays must share the same track and time dimensions.")
+    n_steps = sequences.shape[1]
+    if not 1 <= observed_len <= n_steps:
+        raise ValueError(f"observed_len must be within [1, {n_steps}], got {observed_len}.")
+    if observation_window not in {"prefix", "tail"}:
+        raise ValueError(
+            f"observation_window must be 'prefix' or 'tail', got {observation_window!r}."
+        )
+
+    start_step = 0 if observation_window == "prefix" else n_steps - observed_len
+    end_step = start_step + observed_len
+    return (
+        sequences[:, start_step:end_step, :],
+        threat_seq[:, start_step:end_step],
+        urgency_seq[:, start_step:end_step],
+        start_step,
+        end_step,
+    )
 
 
 def _make_loader(

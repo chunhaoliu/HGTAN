@@ -1,8 +1,7 @@
 """Experiment registry for the air-target UAV threat-assessment study.
 
-The manuscript keeps two formal experiments: comparison and ablation. The
-comparison evidence includes two focused sensitivity axes: observed time and
-range-driven sensing degradation.
+The paper evidence chain contains comparison, ablation, two focused
+sensitivity axes, reference-policy robustness, and scenario-family holdout.
 """
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ SEQUENTIAL_TASK_FORM = "sequential"
 SUITE_SEQUENCE_KEYS = [
     "seq_len",
     "observed_len",
+    "observation_window",
     "frame_interval",
     "range_m",
     "track_noise_std",
@@ -32,6 +32,7 @@ DATA_CONFIG_KEYS = ["scenario_holdout_key", "scenario_holdout_value"]
 SEQUENCE_CONFIG_KEYS = [
     "seq_len",
     "observed_len",
+    "observation_window",
     "frame_interval",
     "range_m",
     "track_noise_std",
@@ -176,6 +177,43 @@ def _observed_time_settings() -> list[dict[str, Any]]:
     ]
 
 
+def _fixed_endpoint_observed_time_settings() -> list[dict[str, Any]]:
+    dataset_id = "ATUAV-Core"
+    protocol_id = "latent_state_masked"
+    return [
+        _sequential_setting(
+            dataset_id,
+            protocol_id,
+            setting_name=f"ATUAV-Core__latent_state_masked__fixed_endpoint_obs{observed_len}",
+            description=(
+                f"Fixed-endpoint history sensitivity using the final {observed_len} frames "
+                f"({observed_len * 0.2:.1f} s) of a common 128-frame track."
+            ),
+            seq_len=128,
+            observed_len=observed_len,
+            observation_window="tail",
+        )
+        for observed_len in [32, 64, 96, 128]
+    ]
+
+
+def _fixed_endpoint_ablation_settings() -> list[dict[str, Any]]:
+    return [
+        _sequential_setting(
+            "ATUAV-Core",
+            "latent_state_masked",
+            setting_name="ATUAV-Core__latent_state_masked__ablation_fixed_endpoint_obs32",
+            description=(
+                "Short-history ablation using the final 32 frames of a common "
+                "64-frame track and the shared terminal labels."
+            ),
+            seq_len=64,
+            observed_len=32,
+            observation_window="tail",
+        )
+    ]
+
+
 def _distance_degradation_settings() -> list[dict[str, Any]]:
     dataset_id = "ATUAV-Core"
     protocol_id = "latent_state_masked"
@@ -230,6 +268,24 @@ def _scenario_holdout_settings() -> list[dict[str, Any]]:
             scenario_holdout_value=family,
         )
         for family in families
+    ]
+
+
+def _missing_robustness_settings() -> list[dict[str, Any]]:
+    return [
+        _sequential_setting(
+            "ATUAV-Core",
+            "latent_state_masked",
+            setting_name="ATUAV-Core__latent_state_masked__test_missing",
+            description=(
+                "Frozen-model test-time robustness under random and contiguous "
+                "frame missingness."
+            ),
+            evaluation_mode="frozen_test_missing",
+            test_missing_modes=["random", "burst"],
+            test_missing_rates=[0.0, 0.05, 0.10, 0.15, 0.20],
+            test_confidence_decay=0.65,
+        )
     ]
 
 
@@ -294,6 +350,22 @@ ASSESSMENT_SUITES: dict[str, dict[str, Any]] = {
         task_form=SEQUENTIAL_TASK_FORM,
         settings=_observed_time_settings(),
     ),
+    "fixed_endpoint_observed_time": _suite_entry(
+        "Fixed-endpoint history sensitivity using tail windows with shared terminal labels.",
+        datasets=["ATUAV-Core"],
+        protocols=["latent_state_masked"],
+        default_n_samples=4000,
+        task_form=SEQUENTIAL_TASK_FORM,
+        settings=_fixed_endpoint_observed_time_settings(),
+    ),
+    "fixed_endpoint_ablation": _suite_entry(
+        "Short-history module ablation with a fixed terminal decision point.",
+        datasets=["ATUAV-Core"],
+        protocols=["latent_state_masked"],
+        default_n_samples=4000,
+        task_form=SEQUENTIAL_TASK_FORM,
+        settings=_fixed_endpoint_ablation_settings(),
+    ),
     "distance_degradation": _suite_entry(
         "Comparison sensitivity axis with range-driven observation degradation from 1000 m to 5000 m.",
         datasets=["ATUAV-Core"],
@@ -317,6 +389,14 @@ ASSESSMENT_SUITES: dict[str, dict[str, Any]] = {
         default_n_samples=4000,
         task_form=SEQUENTIAL_TASK_FORM,
         settings=_scenario_holdout_settings(),
+    ),
+    "missing_robustness": _suite_entry(
+        "Frozen-model robustness to random and contiguous test-time frame missingness.",
+        datasets=["ATUAV-Core"],
+        protocols=["latent_state_masked"],
+        default_n_samples=4000,
+        task_form=SEQUENTIAL_TASK_FORM,
+        settings=_missing_robustness_settings(),
     ),
 }
 
@@ -347,6 +427,16 @@ MODEL_GROUPS: dict[str, list[str]] = {
     "seq_lite": ["LastFrameMLP", "TemporalHGTAN"],
     "seq_main": TRADITIONAL_MODELS + TEMPORAL_MODELS,
     "seq_ablation": SEQ_ABLATION_MODELS,
+    "seq_missing": [
+        "MeanPoolMLP",
+        "FlatSequenceMLP",
+        "TemporalGRU",
+        "TemporalLSTM",
+        "TemporalTransformer",
+        "TemporalTCN",
+        "TemporalHGTAN",
+    ],
+    "seq_window": TEMPORAL_MODELS,
     "lite": ["TOPSIS", "MLP", "HGTAN"],
 }
 

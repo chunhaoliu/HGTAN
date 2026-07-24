@@ -29,6 +29,13 @@ Treat these as the current formal paper-facing experiment chain:
 - `ablation`
 - `observed_time`
 - `distance_degradation`
+- `missing_robustness`
+- `policy_robustness`
+- `scenario_holdout`
+
+Treat the ten-seed `r3_stability_formal_c5_s10` comparison as a formal
+statistical stability audit of the trainable models, not as a separate model
+selection stage.
 
 Treat these as validation or support utilities rather than main paper evidence:
 
@@ -54,6 +61,7 @@ py run.py --suite comparison --mode gpu --models seq_main --n-samples 4000 --itr
 py run.py --suite ablation --mode gpu --models seq_ablation --n-samples 4000 --itr 3 --train_epochs 120 --out-subdir taes_main_ablation
 py run.py --suite observed_time --mode gpu --models seq_curve --n-samples 4000 --itr 3 --train_epochs 120 --batch_size 256 --no_amp --out-subdir taes_sensitivity_observed_time
 py run.py --suite distance_degradation --mode gpu --models seq_curve --n-samples 4000 --itr 3 --train_epochs 120 --batch_size 256 --no_amp --out-subdir taes_sensitivity_distance_degradation
+py run.py --suite missing_robustness --mode gpu --models seq_missing --n-samples 4000 --itr 3 --train_epochs 100 --batch_size 256 --out-subdir r3_missing_formal_c5_s3
 
 # Compile results
 py scripts/compile_taes_bundle.py --tag taes_main --suite-prefix taes_main
@@ -98,6 +106,9 @@ multiprocessing is unstable.
 - Do not overwrite or reinterpret historical result folders without checking
   timestamps and naming first.
 - Runtime outputs are intentionally ignored by Git.
+- `configs/paper/taes_r1_c5.json` is the authoritative paper-evidence manifest.
+- `TemporalHGTAN` is the only paper-facing full model. Experimental V2/Cursor
+  families are archived and must not be mixed into paper tables.
 
 ## Dependency Notes
 

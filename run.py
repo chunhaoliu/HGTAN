@@ -22,6 +22,7 @@ RUN_MODES = ["gpu", "speed", "repro"]
 SETTING_OVERRIDE_KEYS = (
     "seq_len",
     "observed_len",
+    "observation_window",
     "frame_interval",
     "range_m",
     "track_noise_std",
@@ -103,6 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sequence.add_argument("--seq_len", type=int, default=None)
     sequence.add_argument("--observed_len", type=int, default=None)
+    sequence.add_argument("--observation_window", choices=["prefix", "tail"], default=None)
     sequence.add_argument("--frame_interval", type=float, default=None)
     sequence.add_argument("--range_m", type=float, default=None)
     sequence.add_argument("--track_noise_std", type=float, default=None)

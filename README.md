@@ -8,15 +8,19 @@ This project focuses on sequential multi-feature threat assessment for air-targe
 - `policy_robustness`: pre-specified reference-policy variants used to test whether model ranking depends on one frozen policy.
 - `scenario_holdout`: leave-one-scenario-family-out evaluation across Probe-Surveillance, EW-Contested, Strike-Penetration, and Saturation-Overload.
 
-Everything else has been pushed out of the formal path or removed.
+The ten-seed `r3_stability_formal_c5_s10` run is the paired statistical audit
+of the trainable models. Everything else has been pushed out of the formal
+path or archived.
 
 ## Structure
 
 - `data/`: synthetic air-target generation and sequential data pipeline.
+- `configs/paper/`: frozen machine-readable paper model, training, seed, and result identities.
 - `exp/`: experiment engine, compact suite registry, and result writer.
 - `layers/`: reusable neural blocks.
-- `models/`: traditional baselines, sequential baselines, and HGTAN variants.
+- `models/`: traditional baselines, sequential baselines, TemporalHGTAN, and its paper ablations.
 - `scripts/`: result collection and figure/table helper scripts.
+- `scripts/paper/`: one-command PowerShell orchestration for the frozen TAES R1 evidence chain.
 - `utils/`: configuration, training, metrics, and runtime helpers.
 - `run.py`: the only main Python entry.
 
@@ -63,17 +67,38 @@ py run.py --suite comparison --models seq_main --out-subdir r3_comparison_formal
 py run.py --suite policy_robustness --models FlatSequenceMLP,TemporalGRU,TemporalLSTM,TemporalTransformer,TemporalTCN,TemporalHGTAN --out-subdir r3_policy_formal_c5_s3 @common
 py run.py --suite scenario_holdout --models FlatSequenceMLP,TemporalGRU,TemporalLSTM,TemporalTransformer,TemporalTCN,TemporalHGTAN --out-subdir r3_holdout_formal_c5_s3 @common
 py run.py --suite ablation --models seq_ablation --out-subdir r3_ablation_formal_c5_s3 @common
-py run.py --suite observed_time --models seq_curve --out-subdir r3_observed_time_formal_c5_s3 @common
+py run.py --suite fixed_endpoint_observed_time --models seq_window --out-subdir fixed_endpoint_window_formal_s3 @common
+py run.py --suite fixed_endpoint_ablation --models seq_ablation --out-subdir fixed_endpoint_ablation_obs32_formal_s3 @common
 py run.py --suite distance_degradation --models seq_curve --out-subdir r3_distance_formal_c5_s3 @common
+py run.py --suite missing_robustness --models seq_missing --out-subdir r3_missing_formal_c5_s3 @common
 ```
 
-The `ablation` suite now bundles three settings under one formal experiment:
+The same frozen recipe is available as a staged script:
+
+```powershell
+./scripts/paper/run_taes_r1.ps1 -Stage Main
+./scripts/paper/run_taes_r1.ps1 -Stage Stability
+./scripts/paper/run_taes_r1.ps1 -Stage Statistics
+./scripts/paper/run_taes_r1.ps1 -Stage Assets
+./scripts/paper/run_taes_r1.ps1 -Stage Audit
+```
+
+The authoritative identities and reporting convention are stored in
+`configs/paper/taes_r1_c5.json`. Paper tables report the mean plus or minus the
+sample standard deviation across the three main seeds. The stability audit
+uses ten fixed paired seeds and the same `TemporalHGTAN` registry entry as the
+three-seed comparison.
+
+The default `ablation` suite retains the full-window module controls:
 
 - default full observation
-- short-history stress at `32` frames (`6.4 s`)
 - far-range stress at `5000 m`
 
-The observation-length and distance-degradation suites are the two focused sensitivity axes. The policy and scenario suites test coefficient dependence and internal extrapolation; neither is external field validation.
+The paper-facing history sensitivity uses `fixed_endpoint_observed_time`: every
+32/64/96/128-frame tail window ends at the same terminal decision point. The
+separate `fixed_endpoint_ablation` suite compares adaptive fusion, mean pooling,
+and last-frame selection over the final 32 frames. The distance, policy, and
+scenario suites retain their previous roles; none is external field validation.
 
 On Windows, `--num_workers 0 --no_persistent_workers` is the stable fallback when DataLoader multiprocessing is noisy.
 
@@ -96,14 +121,14 @@ The current revision manuscript is kept in one file outside this repository:
 Collect only the final c5 suites before refreshing manuscript figures:
 
 ```powershell
-py scripts/collect_results.py --root ../Outputs/atuav_assessment/experiments --out ../Outputs/atuav_assessment/compiled --tag r3_c5 --suites r3_comparison_formal_c5_s3,r3_policy_formal_c5_s3,r3_holdout_formal_c5_s3,r3_ablation_formal_c5_s3,r3_observed_time_formal_c5_s3,r3_distance_formal_c5_s3
-py scripts/make_taes_figures.py --compiled ../Outputs/atuav_assessment/compiled --experiment-root ../Outputs/atuav_assessment/experiments --tag r3_c5 --suite-prefix r3_
+py scripts/collect_results.py --root ../Outputs/atuav_assessment/experiments --out ../Outputs/atuav_assessment/compiled --tag r3_c5_fixed_endpoint --suites r3_comparison_formal_c5_s3,r3_policy_formal_c5_s3,r3_holdout_formal_c5_s3,r3_ablation_formal_c5_s3,fixed_endpoint_window_formal_s3,fixed_endpoint_ablation_obs32_formal_s3,r3_distance_formal_c5_s3,r3_missing_formal_c5_s3
+py scripts/make_taes_figures.py --compiled ../Outputs/atuav_assessment/compiled --experiment-root ../Outputs/atuav_assessment/experiments --tag r3_c5_fixed_endpoint
 ```
 
 These commands regenerate:
 
-- `../Outputs/atuav_assessment/compiled/r3_c5_summary.csv`
-- `../Outputs/atuav_assessment/compiled/r3_c5_figures/`
+- `../Outputs/atuav_assessment/compiled/r3_c5_fixed_endpoint_summary.csv`
+- `../Outputs/atuav_assessment/compiled/r3_c5_fixed_endpoint_figures/`
 
 ## Outputs
 
@@ -125,4 +150,15 @@ Compiled manuscript assets:
 ../Outputs/atuav_assessment/compiled/<tag>_figures/
 ```
 
+Frozen audit assets:
+
+```text
+../Outputs/atuav_assessment/paper/taes_r1_c5/dataset_statistics.json
+../Outputs/atuav_assessment/paper/taes_r1_c5/dataset_statistics.sha256
+../Outputs/atuav_assessment/paper/taes_r1_c5/stability_composite_f1_audit.csv
+../Outputs/atuav_assessment/paper/taes_r1_c5/audit_report.json
+```
+
 Historical result folders under `../Outputs/atuav_bench/` are kept only for backward compatibility. Paper claims must use one named experiment chain and must not mix old and final configurations.
+Archived optimization outputs under `../Archive/HGTAN_exploration_20260713/`
+are provenance records only and are excluded from manuscript tables.

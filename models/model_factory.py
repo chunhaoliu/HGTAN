@@ -15,21 +15,6 @@ from models.hgtan import (
     TemporalHGTANNoPrior,
     TemporalHGTANNoSynergy,
 )
-from models.hgtan_cursor import (
-    TemporalHGTANCursor,
-    TemporalHGTANCursorDeep,
-    TemporalHGTANCursorNoReliability,
-    TemporalHGTANCursorWithMix,
-)
-from models.hgtan_v2 import (
-    TemporalHGTANV2,
-    TemporalHGTANV2Core,
-    TemporalHGTANV2CoreNoGrouping,
-    TemporalHGTANV2CoreNoTemporal,
-    TemporalHGTANV2NoReliability,
-    TemporalHGTANV2NoSynergy,
-    TemporalHGTANV2NoTemporal,
-)
 from models.temporal_baselines import (
     FlatSequenceMLPBaseline,
     LastFrameMLPBaseline,
@@ -72,17 +57,6 @@ HGTAN_MODEL_REGISTRY = {
     "TemporalHGTAN_MeanPool": TemporalHGTANMeanPool,
     "TemporalHGTAN_NoPrior": TemporalHGTANNoPrior,
     "TemporalHGTAN_NoSynergy": TemporalHGTANNoSynergy,
-    "TemporalHGTANV2": TemporalHGTANV2,
-    "TemporalHGTANV2_Core": TemporalHGTANV2Core,
-    "TemporalHGTANV2_CoreNoTemporal": TemporalHGTANV2CoreNoTemporal,
-    "TemporalHGTANV2_CoreNoGrouping": TemporalHGTANV2CoreNoGrouping,
-    "TemporalHGTANV2_NoReliability": TemporalHGTANV2NoReliability,
-    "TemporalHGTANV2_NoTemporal": TemporalHGTANV2NoTemporal,
-    "TemporalHGTANV2_NoSynergy": TemporalHGTANV2NoSynergy,
-    "TemporalHGTAN_Cursor": TemporalHGTANCursor,
-    "TemporalHGTAN_CursorNoReliability": TemporalHGTANCursorNoReliability,
-    "TemporalHGTAN_CursorWithMix": TemporalHGTANCursorWithMix,
-    "TemporalHGTAN_CursorDeep": TemporalHGTANCursorDeep,
 }
 
 SEQUENTIAL_MODELS = frozenset(SEQUENTIAL_MODEL_REGISTRY) | frozenset(

@@ -26,6 +26,7 @@ from data.generator import (
 )
 from data.sequence_generator import generate_uav_track_payload, generate_uav_track_sequences
 from data.sequence_pipeline import prepare_sequence_data, sequence_data_provider
+from data.test_missingness import apply_frame_missingness, build_frame_missing_mask, build_missing_test_bundle
 
 __all__ = [
     "ATUAVDataset",
@@ -54,4 +55,7 @@ __all__ = [
     "prepare_experiment_data",
     "prepare_sequence_data",
     "resolve_class_weights",
+    "apply_frame_missingness",
+    "build_frame_missing_mask",
+    "build_missing_test_bundle",
 ]
