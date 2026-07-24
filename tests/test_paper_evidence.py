@@ -112,6 +112,8 @@ def test_fixed_endpoint_evidence_is_the_default_paper_bundle() -> None:
     assert suites["fixed_endpoint_ablation"] == "fixed_endpoint_ablation_obs32_formal_s3"
     assert "fig_ablation_fixed_summary_composite_f1" in figures
     assert "fig_ablation_fixed_summary_temporal_f1" in figures
+    assert "fig_ablation_default_summary_composite_f1" in figures
+    assert "fig_ablation_default_summary_temporal_f1" in figures
     assert "fig_policy_holdout_margins" not in figures
     assert "fig_ablation_short_composite_f1" not in figures
 

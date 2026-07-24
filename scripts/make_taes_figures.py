@@ -1757,7 +1757,7 @@ def plot_policy_holdout_comparison_figures(
 
 
 def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> list[Path]:
-    """Plot default module ablations and fixed-endpoint temporal controls."""
+    """Plot structural ablations and temporal-summary controls."""
     if run_metrics.empty:
         return []
 
@@ -1779,9 +1779,8 @@ def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> 
     if default_setting is None or fixed_setting is None:
         return []
 
-    module_specs = [
+    structural_specs = [
         ("TemporalHGTAN", "Full", "#F04B3A", ""),
-        ("TemporalHGTAN_MeanPool", "w/o T", "#22A7E0", ""),
         ("TemporalHGTAN_NoPrior", "w/o P", "#35C26B", ""),
         ("TemporalHGTAN_NoSynergy", "w/o S", "#8F5BD8", ""),
     ]
@@ -1797,7 +1796,8 @@ def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> 
 
     records: list[dict[str, float | int | str]] = []
     condition_specs = [
-        ("Default modules", default_suite, default_setting, module_specs),
+        ("Default structural modules", default_suite, default_setting, structural_specs),
+        ("Default temporal summaries", default_suite, default_setting, temporal_summary_specs),
         ("Fixed-endpoint summaries", fixed_suite, fixed_setting, temporal_summary_specs),
     ]
     for condition, suite, setting, source_specs in condition_specs:
@@ -1838,7 +1838,8 @@ def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> 
     written: list[Path] = []
     for metric_label, _task, _metric_name, metric_stem in metric_specs:
         panel_specs = [
-            ("Default modules", "default", module_specs, True),
+            ("Default structural modules", "default", structural_specs, True),
+            ("Default temporal summaries", "default_summary", temporal_summary_specs, False),
             ("Fixed-endpoint summaries", "fixed_summary", temporal_summary_specs, False),
         ]
         for condition, condition_stem, display_specs, show_ylabel in panel_specs:
@@ -1853,7 +1854,7 @@ def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> 
             y_margin = max(0.18, 0.28 * value_span)
             y_min = 0.1 * np.floor(10.0 * (float(np.min(means)) - y_margin))
             y_max = 0.1 * np.ceil(10.0 * (float(np.max(means)) + y_margin))
-            x_step = 0.88 if condition_stem == "fixed_summary" else 0.76
+            x_step = 0.88 if condition_stem in {"default_summary", "fixed_summary"} else 0.82
             x = x_step * np.arange(len(display_specs), dtype=float)
             fig, ax = new_panel_figure(width=2.28, height=1.38, journal=True)
             ax.grid(False)
@@ -1875,7 +1876,7 @@ def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> 
                 spine.set_color("#6A6A6A")
                 spine.set_linewidth(0.58)
             ax.set_xticks(x)
-            tick_fontsize = 7.2 if condition_stem == "fixed_summary" else 7.5
+            tick_fontsize = 7.2 if condition_stem in {"default_summary", "fixed_summary"} else 7.5
             ax.set_xticklabels([spec[1] for spec in display_specs], fontsize=tick_fontsize)
             ax.tick_params(axis="x", length=0, pad=1.3)
             ax.tick_params(axis="y", labelsize=7.3, width=0.55, length=2.2)
@@ -3232,8 +3233,10 @@ def caption_for_stem(stem: str) -> str:
         "fig_distance_degradation_composite_f1": "Range-degradation sensitivity in composite F1",
         "fig_distance_degradation_dynamic_accuracy": "Range-degradation sensitivity in threat temporal accuracy",
         "fig_ablation_default_composite_f1": "Default-condition composite F1 ablation",
+        "fig_ablation_default_summary_composite_f1": "Default-condition temporal-summary composite F1 control",
         "fig_ablation_fixed_summary_composite_f1": "Fixed-endpoint temporal-summary composite F1 control",
         "fig_ablation_default_temporal_f1": "Default-condition temporal macro-F1 ablation",
+        "fig_ablation_default_summary_temporal_f1": "Default-condition temporal-summary temporal macro-F1 control",
         "fig_ablation_fixed_summary_temporal_f1": "Fixed-endpoint temporal-summary temporal macro-F1 control",
         "fig_event_timing_agreement": "First-critical-alarm agreement over clean-reference transition tracks",
         "fig_event_aligned_disagreement": "Critical-decision disagreement aligned to the clean-reference transition",
