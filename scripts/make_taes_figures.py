@@ -1781,6 +1781,7 @@ def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> 
 
     structural_specs = [
         ("TemporalHGTAN", "Full", "#F04B3A", ""),
+        ("TemporalHGTAN_MeanPool", "w/o T", "#22A7E0", ""),
         ("TemporalHGTAN_NoPrior", "w/o P", "#35C26B", ""),
         ("TemporalHGTAN_NoSynergy", "w/o S", "#8F5BD8", ""),
     ]
@@ -1854,7 +1855,7 @@ def plot_ablation_absolute_figures(run_metrics: pd.DataFrame, out_dir: Path) -> 
             y_margin = max(0.18, 0.28 * value_span)
             y_min = 0.1 * np.floor(10.0 * (float(np.min(means)) - y_margin))
             y_max = 0.1 * np.ceil(10.0 * (float(np.max(means)) + y_margin))
-            x_step = 0.88 if condition_stem in {"default_summary", "fixed_summary"} else 0.82
+            x_step = 0.88 if condition_stem in {"default_summary", "fixed_summary"} else 0.76
             x = x_step * np.arange(len(display_specs), dtype=float)
             fig, ax = new_panel_figure(width=2.28, height=1.38, journal=True)
             ax.grid(False)
